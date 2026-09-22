@@ -7,6 +7,7 @@ import ContentAI from "./pages/ContentAI"
 import Settings from "./pages/Settings"
 import PricingPlans from "./pages/PricingPlans"
 import AdminPanel from "./pages/AdminPanel"
+import AuthFlow from "./pages/AuthFlow"
 import { brands, type Brand } from "./data"
 
 type Page = "dashboard" | "audit" | "roadmap" | "content" | "calendar" | "competitors" | "analytics" | "reports" | "billing" | "settings"
@@ -407,6 +408,8 @@ function WorkspacePage({
 }
 function AppWorkspace() {
   const [inApp, setInApp] = useState(false)
+  const [authOpen, setAuthOpen] = useState(false)
+  const [adminPath, setAdminPath] = useState(false)
   const [page, setPage] = useState<Page>("dashboard")
   const [brand, setBrand] = useState(brands[0])
   const [brandModal, setBrandModal] = useState(false)
@@ -416,7 +419,25 @@ function AppWorkspace() {
     document.documentElement.dataset.theme = theme
   }, [theme])
   const toast = (value: string) => setToastMessage(value)
-  if (!inApp) return <Landing onEnterApp={() => setInApp(true)} />
+  if (adminPath) return <AdminPanel onLogout={() => setAdminPath(false)} />
+  if (!inApp)
+    return (
+      <>
+        <Landing onEnterApp={() => setAuthOpen(true)} />
+        {authOpen && (
+          <AuthFlow
+            onSuccess={() => {
+              setAuthOpen(false)
+              setInApp(true)
+            }}
+            onAdmin={() => {
+              setAuthOpen(false)
+              setAdminPath(true)
+            }}
+          />
+        )}
+      </>
+    )
   return (
     <div className="min-h-screen">
       <Sidebar
