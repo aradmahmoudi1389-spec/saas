@@ -1,0 +1,253 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role { USER ADMIN SUPER_ADMIN }
+enum AnalysisStatus { QUEUED RUNNING COMPLETED FAILED }
+enum TaskStatus { TODO IN_PROGRESS DONE }
+enum SubscriptionStatus { ACTIVE PAST_DUE CANCELED }
+enum PaymentStatus { PENDING PAID FAILED REFUNDED }
+
+model User {
+  id              String          @id @default(cuid())
+  phone           String?         @unique
+  email           String?         @unique
+  passwordHash    String?
+  firstName       String?
+  lastName        String?
+  role            Role            @default(USER)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  profile         Profile?
+  brands          BrandProfile[]
+  sessions        Session[]
+  analyses        BrandAnalysis[]
+  contents        Content[]
+  ideas           ContentIdea[]
+  roadmaps        Roadmap[]
+  subscriptions   Subscription[]
+  payments        Payment[]
+  notifications   Notification[]
+  aiUsages        AIUsage[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, expiresAt])
+}
+
+model Profile {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  imageUrl           String?
+  bio                String?
+  profession         String?
+  niche              String?
+  targetAudience     String?
+  productsServices   String?
+  mainGoal           String?
+  onboardingComplete Boolean  @default(false)
+  instagramHandle    String?
+  followers          Int?
+  following          Int?
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model BrandProfile {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  industry    String?
+  audience    String?
+  tone        String?
+  positioning String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  analyses    BrandAnalysis[]
+  contents    Content[]
+  ideas       ContentIdea[]
+  roadmaps    Roadmap[]
+  @@index([userId])
+}
+
+model BrandAnalysis {
+  id        String         @id @default(cuid())
+  userId    String
+  brandId   String
+  status    AnalysisStatus @default(QUEUED)
+  score     Int?
+  result    Json?
+  error     String?
+  createdAt DateTime       @default(now())
+  completedAt DateTime?
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brand     BrandProfile   @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  scores    BrandScore[]
+  @@index([userId, createdAt])
+}
+
+model BrandScore {
+  id           String        @id @default(cuid())
+  analysisId   String
+  overall      Int
+  positioning  Int
+  content      Int
+  profile      Int
+  authority    Int
+  audience     Int
+  monetization Int
+  createdAt    DateTime      @default(now())
+  analysis     BrandAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  @@index([analysisId, createdAt])
+}
+
+model Content {
+  id          String       @id @default(cuid())
+  userId      String
+  brandId     String
+  type        String
+  title       String?
+  caption     String?
+  hook        String?
+  topic       String?
+  cta         String?
+  status      String       @default("DRAFT")
+  scheduledAt DateTime?
+  metadata    Json?
+  createdAt   DateTime     @default(now())
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brand       BrandProfile @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  analysis    ContentAnalysis?
+  @@index([userId, status, scheduledAt])
+}
+
+model ContentAnalysis {
+  id                String  @id @default(cuid())
+  contentId         String  @unique
+  contentScore      Int
+  hookScore         Int
+  valueScore        Int
+  ctaScore          Int
+  brandAlignment    Int
+  result            Json?
+  content           Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+}
+
+model ContentIdea {
+  id             String       @id @default(cuid())
+  userId         String
+  brandId        String
+  title          String
+  hook           String
+  format         String
+  contentPillar  String?
+  targetAudience String?
+  cta            String?
+  objective      String?
+  difficulty     String?
+  expectedOutcome String?
+  createdAt      DateTime     @default(now())
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brand          BrandProfile @relation(fields: [brandId], references: [id], onDelete: Cascade)
+}
+
+model Roadmap {
+  id        String       @id @default(cuid())
+  userId    String
+  brandId   String
+  title     String
+  duration  Int
+  createdAt DateTime     @default(now())
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brand     BrandProfile @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  tasks     RoadmapTask[]
+}
+
+model RoadmapTask {
+  id          String     @id @default(cuid())
+  roadmapId   String
+  title       String
+  description String?
+  priority    String     @default("MEDIUM")
+  status      TaskStatus @default(TODO)
+  deadline    DateTime?
+  progress    Int        @default(0)
+  roadmap     Roadmap    @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+  @@index([roadmapId, status])
+}
+
+model Plan {
+  id             String         @id @default(cuid())
+  key            String         @unique
+  name           String
+  monthlyPrice   Int
+  analysisLimit  Int
+  aiUsageLimit   Int
+  contentLimit   Int
+  features       Json
+  active         Boolean        @default(true)
+  subscriptions  Subscription[]
+}
+
+model Subscription {
+  id         String             @id @default(cuid())
+  userId     String
+  planId     String
+  status     SubscriptionStatus @default(ACTIVE)
+  startsAt   DateTime           @default(now())
+  renewsAt   DateTime?
+  canceledAt DateTime?
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan       Plan               @relation(fields: [planId], references: [id])
+  payments   Payment[]
+  @@index([userId, status])
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  userId         String
+  subscriptionId String?
+  provider       String
+  transactionId  String?       @unique
+  amount         Int
+  currency       String        @default("IRR")
+  status         PaymentStatus @default(PENDING)
+  createdAt      DateTime      @default(now())
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+}
+
+model AIUsage {
+  id        String   @id @default(cuid())
+  userId    String
+  provider  String
+  operation String
+  tokens    Int      @default(0)
+  cost      Int      @default(0)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, readAt, createdAt])
+}
