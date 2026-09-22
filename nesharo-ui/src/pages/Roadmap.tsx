@@ -7,7 +7,7 @@ const roadmap: Record<Phase, { week: string; tasks: { title: string; desc: strin
     {
       week: 'هفته ۱–۲',
       tasks: [
-        { title: 'بازنویسی بیو پیج', desc: 'با فرمت اختصاصی BrandPilot — جایگاه + مخاطب + نتیجه', priority: 'high', done: true },
+        { title: 'بازنویسی بیو پیج', desc: 'با فرمت اختصاصی Nesharo — جایگاه + مخاطب + نتیجه', priority: 'high', done: true },
         { title: 'تعریف Core Message', desc: 'یک جمله که هر محتوا باید به آن برگردد', priority: 'high', done: true },
         { title: 'Brand Kit طراحی', desc: 'رنگ، فونت، و تمپلیت پست اختصاصی', priority: 'high', done: false },
       ],

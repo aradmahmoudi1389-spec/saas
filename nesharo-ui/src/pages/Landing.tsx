@@ -29,7 +29,7 @@ const competitors = [
   { name: 'ChatGPT', content: true, audit: false, roadmap: false },
   { name: 'ابزار آنالیتیکس', content: false, audit: 'محدود', roadmap: false },
   { name: 'مشاور انسانی', content: true, audit: true, roadmap: true, expensive: true },
-  { name: 'BrandPilot', content: true, audit: true, roadmap: true, highlight: true },
+  { name: 'Nesharo', content: true, audit: true, roadmap: true, highlight: true },
 ];
 
 const plans = [
@@ -71,7 +71,7 @@ const testimonials = [
   {
     name: 'آرمین حسینی',
     role: 'مدرس طراحی گرافیک · ۴۲K فالوور',
-    text: 'قبل از BrandPilot واقعاً نمی‌دونستم چرا رشدم متوقف شده. بعد از اولین تحلیل، ۳ تا نقطه کور واضح توی محتوام پیدا شد.',
+    text: 'قبل از Nesharo واقعاً نمی‌دونستم چرا رشدم متوقف شده. بعد از اولین تحلیل، ۳ تا نقطه کور واضح توی محتوام پیدا شد.',
     score: 84,
     avatar: 'آ',
   },
@@ -107,7 +107,7 @@ export default function Landing({ onEnterApp }: LandingProps) {
             B
           </div>
           <span className="font-display font-semibold text-lg" style={{ color: 'var(--foreground)' }}>
-            BrandPilot
+            Nesharo
           </span>
         </div>
         <div className="flex items-center gap-3">
@@ -268,7 +268,7 @@ export default function Landing({ onEnterApp }: LandingProps) {
       <section className="py-24 px-6">
         <div className="max-w-4xl mx-auto">
           <h2 className="font-display text-3xl font-bold text-center mb-12" style={{ color: 'var(--foreground)' }}>
-            چرا BrandPilot؟
+            چرا Nesharo؟
           </h2>
           <div
             className="rounded-2xl overflow-hidden"
@@ -422,10 +422,10 @@ export default function Landing({ onEnterApp }: LandingProps) {
           >
             B
           </div>
-          <span className="font-display font-semibold" style={{ color: 'var(--foreground)' }}>BrandPilot</span>
+          <span className="font-display font-semibold" style={{ color: 'var(--foreground)' }}>Nesharo</span>
         </div>
         <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-          © ۱۴۰۳ BrandPilot — هوش مصنوعی پرسونال برند
+          © ۱۴۰۳ Nesharo — هوش مصنوعی پرسونال برند
         </p>
       </footer>
     </div>
