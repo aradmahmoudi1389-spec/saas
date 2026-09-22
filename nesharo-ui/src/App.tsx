@@ -1,17 +1,488 @@
-import { useEffect, useState } from 'react'
-import Landing from './pages/Landing'
-import Dashboard from './pages/Dashboard'
-import BrandAudit from './pages/BrandAudit'
-import Roadmap from './pages/Roadmap'
-import ContentAI from './pages/ContentAI'
-import Settings from './pages/Settings'
-import { brands, type Brand } from './data'
+import { useEffect, useState } from "react"
+import Landing from "./pages/Landing"
+import Dashboard from "./pages/Dashboard"
+import BrandAudit from "./pages/BrandAudit"
+import Roadmap from "./pages/Roadmap"
+import ContentAI from "./pages/ContentAI"
+import Settings from "./pages/Settings"
+import PricingPlans from "./pages/PricingPlans"
+import AdminPanel from "./pages/AdminPanel"
+import { brands, type Brand } from "./data"
 
-type Page = 'dashboard'|'audit'|'roadmap'|'content'|'calendar'|'competitors'|'analytics'|'reports'|'billing'|'settings'
-const nav: {id:Page;icon:string;label:string}[] = [{id:'dashboard',icon:'⌂',label:'داشبورد'},{id:'audit',icon:'◈',label:'Brand Audit'},{id:'roadmap',icon:'◌',label:'Roadmap'},{id:'content',icon:'✦',label:'Content AI'},{id:'calendar',icon:'□',label:'تقویم محتوا'},{id:'competitors',icon:'◎',label:'رقبا'},{id:'analytics',icon:'↗',label:'آنالیتیکس'},{id:'reports',icon:'▤',label:'گزارش‌ها'}]
-function Toast({message,onClose}:{message:string;onClose:()=>void}){useEffect(()=>{const t=setTimeout(onClose,2800);return()=>clearTimeout(t)},[onClose]);return <div className="fixed bottom-5 left-5 z-[80] rounded-xl px-4 py-3 shadow-xl" style={{background:'var(--foreground)',color:'var(--card)'}}>✓ {message} <button onClick={onClose}>×</button></div>}
-function AddBrand({onClose,onAdd}:{onClose:()=>void;onAdd:(b:Brand)=>void}){const [step,setStep]=useState(1);const [name,setName]=useState('');const [industry,setIndustry]=useState('');return <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{background:'#0b102066'}}><div className="w-full max-w-lg rounded-2xl p-6" style={{background:'var(--card)',border:'1px solid var(--border)'}}><div className="flex justify-between mb-6"><div><div className="text-xs" style={{color:'var(--muted-foreground)'}}>گام {step} از 2</div><h2 className="text-xl font-bold mt-1">افزودن برند جدید</h2></div><button onClick={onClose}>×</button></div><div className="flex gap-2 mb-6"><div className="h-1 flex-1 rounded-full" style={{background:'var(--primary)'}}/><div className="h-1 flex-1 rounded-full" style={{background:step===2?'var(--primary)':'var(--secondary)'}}/></div>{step===1?<div className="space-y-4"><label className="block text-sm">نام برند<input className="w-full mt-2 rounded-xl p-3" style={{background:'var(--secondary)',border:'1px solid var(--border)',outline:'none'}} value={name} onChange={e=>setName(e.target.value)} placeholder="مثلاً آکادمی رشد"/></label><label className="block text-sm">حوزه فعالیت<input className="w-full mt-2 rounded-xl p-3" style={{background:'var(--secondary)',border:'1px solid var(--border)',outline:'none'}} value={industry} onChange={e=>setIndustry(e.target.value)} placeholder="مثلاً کوچینگ کسب‌وکار"/></label></div>:<div className="space-y-4"><label className="block text-sm">مخاطب هدف<input className="w-full mt-2 rounded-xl p-3" style={{background:'var(--secondary)',border:'1px solid var(--border)',outline:'none'}} placeholder="چه کسانی را جذب می‌کنید؟"/></label><label className="block text-sm">لحن برند<select className="w-full mt-2 rounded-xl p-3" style={{background:'var(--secondary)',border:'1px solid var(--border)'}}><option>آموزشی و صمیمی</option><option>حرفه‌ای و مطمئن</option></select></label></div>}<div className="flex gap-3 mt-7"><button className="flex-1 py-3 rounded-xl" style={{background:'var(--secondary)'}} onClick={step===1?onClose:()=>setStep(1)}>انصراف</button><button className="flex-1 py-3 rounded-xl text-white" style={{background:'var(--primary)'}} onClick={()=>step===1?setStep(2):onAdd({id:Date.now().toString(),name:name||'برند جدید',handle:'@new.brand',industry:industry||'حوزه فعالیت',audience:'مخاطبان شما',tone:'آموزشی و صمیمی',score:0})}>{step===1?'ادامه':'ساخت برند'}</button></div></div></div>}
-function Sidebar({page,setPage,brand,onBrandClick,onExit}:{page:Page;setPage:(p:Page)=>void;brand:Brand;onBrandClick:()=>void;onExit:()=>void}){return <aside className="fixed right-0 top-0 bottom-0 hidden w-64 flex-col md:flex" style={{background:'var(--card)',borderLeft:'1px solid var(--border)',zIndex:40}}><div className="p-5 border-b" style={{borderColor:'var(--border)'}}><div className="flex items-center gap-2"><div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold" style={{background:'linear-gradient(135deg,#6d28d9,#8b5cf6)'}}>N</div><div><div className="font-bold">Nesharo</div><div className="text-[11px]" style={{color:'var(--muted-foreground)'}}>Brand Intelligence</div></div></div></div><button onClick={onBrandClick} className="m-4 rounded-xl p-3 text-right" style={{background:'var(--secondary)',border:'1px solid var(--border)'}}><div className="flex items-center justify-between"><span>⌄</span><div><div className="text-xs" style={{color:'var(--muted-foreground)'}}>برند فعال</div><div className="text-sm font-semibold mt-1">{brand.name}</div></div></div></button><nav className="flex-1 overflow-y-auto px-3"><div className="px-3 pb-2 text-[11px] font-bold" style={{color:'var(--muted-foreground)'}}>WORKSPACE</div>{nav.map(item=><button key={item.id} onClick={()=>setPage(item.id)} className={`w-full flex items-center gap-3 rounded-xl px-3 py-3 mb-1 text-right ${page===item.id?'nav-active':''}`}><span className="w-5 text-center">{item.icon}</span><span className="text-sm">{item.label}</span></button>)}<div className="px-3 pt-5 pb-2 text-[11px] font-bold" style={{color:'var(--muted-foreground)'}}>حساب</div>{[['billing','اشتراک و صورتحساب'],['settings','تنظیمات']].map(([id,label])=><button key={id} onClick={()=>setPage(id as Page)} className={`w-full flex items-center gap-3 rounded-xl px-3 py-3 mb-1 text-right ${page===id?'nav-active':''}`}><span>⚙</span><span className="text-sm">{label}</span></button>)}</nav><button onClick={onExit} className="m-4 p-3 rounded-xl text-sm text-right" style={{color:'var(--muted-foreground)',borderTop:'1px solid var(--border)'}}>↩ خروج از فضای کاری</button></aside>}
-function Header({brand,onTheme,onBrandClick,onNotify}:{brand:Brand;onTheme:()=>void;onBrandClick:()=>void;onNotify:()=>void}){return <header className="sticky top-0 z-30 flex items-center justify-between gap-4 px-5 py-3 md:px-8" style={{background:'var(--background)dd',backdropFilter:'blur(14px)',borderBottom:'1px solid var(--border)'}}><div className="md:hidden flex items-center gap-2"><div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold" style={{background:'var(--primary)'}}>N</div><b>Nesharo</b></div><button className="hidden md:flex items-center gap-2 rounded-xl px-3 py-2 text-sm" style={{background:'var(--card)',border:'1px solid var(--border)'}} onClick={onBrandClick}>◈ {brand.name} ⌄</button><div className="flex items-center gap-2 mr-auto"><button onClick={onTheme} className="w-9 h-9 rounded-xl" style={{background:'var(--card)',border:'1px solid var(--border)'}}>☼</button><button onClick={onNotify} className="relative w-9 h-9 rounded-xl" style={{background:'var(--card)',border:'1px solid var(--border)'}}>♢<i className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500"/></button><div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold" style={{background:'linear-gradient(135deg,#6d28d9,#8b5cf6)'}}>آ</div></div></header>}
-function WorkspacePage({page,toast}:{page:Page;toast:(s:string)=>void}){const info:Record<string,[string,string,string[]]>={calendar:['تقویم محتوا','تمام محتوای برنامه‌ریزی‌شده را در یک نگاه مدیریت کنید.',['شنبه · کاروسل آموزشی · آماده','دوشنبه · ریلز قبل و بعد لوگو · برنامه‌ریزی','چهارشنبه · Case Study · ایده']],competitors:['هوش رقابتی','رقبا را با داده‌های برآوردی مقایسه و فرصت‌های محتوایی را پیدا کنید.',['@design.school · ۸۲K دنبال‌کننده · تعامل ۶.۲٪','@creativecoach · ۴۶K دنبال‌کننده · تعامل ۵.۸٪']],analytics:['آنالیتیکس','رشد برند را با معیارهای قابل اندازه‌گیری دنبال کنید.',['فالوور · ۴۲,۱۸۰ · +۳.۲٪','Reach · ۱۸۲K · +۱۸٪','Engagement · ۸.۴٪ · +۱.۱٪']],reports:['گزارش‌ها','خروجی‌های حرفه‌ای برای مرور و اشتراک‌گذاری عملکرد برند.',['گزارش ماهانه رشد · آماده دریافت','تحلیل برند · ۲ ساعت پیش','گزارش رقبا · تولید نشده']],billing:['اشتراک و صورتحساب','وضعیت پلن، مصرف و فاکتورهای شما.',['پلن فعلی · Pro','مصرف این ماه · ۶۴٪','تمدید بعدی · ۲۸ شهریور ۱۴۰۳']]};const [title,desc,items]=info[page]||info.analytics;return <div className="p-5 md:p-8 max-w-6xl mx-auto"><div className="flex items-start justify-between mb-8"><div><h1 className="text-2xl font-bold">{title}</h1><p className="text-sm mt-2" style={{color:'var(--muted-foreground)'}}>{desc}</p></div><button onClick={()=>toast('درخواست شما ثبت شد')} className="px-4 py-2 rounded-xl text-sm text-white" style={{background:'var(--primary)'}}>+ ایجاد جدید</button></div><div className="grid md:grid-cols-3 gap-4 mb-8">{['این هفته','این ماه','امتیاز برند'].map((x,i)=><div className="rounded-2xl p-5" style={{background:'var(--card)',border:'1px solid var(--border)'}} key={x}><div className="text-sm" style={{color:'var(--muted-foreground)'}}>{x}</div><div className="text-2xl font-bold mt-3">{['۱۲','۴۸','۷۲'][i]}</div><div className="text-xs mt-2" style={{color:'var(--success)'}}>+{[3,12,8][i]}٪ نسبت به قبل</div></div>)}</div><div className="rounded-2xl p-5" style={{background:'var(--card)',border:'1px solid var(--border)'}}><div className="flex justify-between mb-5"><h2 className="font-bold">آخرین موارد</h2><button className="text-sm" style={{color:'var(--primary)'}}>مشاهده همه</button></div><div className="space-y-3">{items.map((x,i)=><div key={x} className="flex items-center justify-between p-4 rounded-xl" style={{background:'var(--secondary)'}}><span className="text-sm">{x}</span><button onClick={()=>toast('خروجی آماده شد')} className="text-xs px-3 py-2 rounded-lg" style={{background:'var(--card)',border:'1px solid var(--border)'}}>{i===2?'ادامه':'جزئیات'}</button></div>)}</div></div></div>}
-export default function App(){const [inApp,setInApp]=useState(false);const [page,setPage]=useState<Page>('dashboard');const [brand,setBrand]=useState(brands[0]);const [brandModal,setBrandModal]=useState(false);const [toastMessage,setToastMessage]=useState('');const [theme,setTheme]=useState<'light'|'dark'>('light');const [mobile,setMobile]=useState(false);useEffect(()=>{document.documentElement.dataset.theme=theme},[theme]);const toast=(s:string)=>setToastMessage(s);if(!inApp)return <Landing onEnterApp={()=>setInApp(true)}/>;const navigate=(p:Page)=>{setPage(p);setMobile(false)};return <div className="min-h-screen"><Sidebar page={page} setPage={navigate} brand={brand} onBrandClick={()=>setBrandModal(true)} onExit={()=>setInApp(false)}/><div className="md:mr-64"><Header brand={brand} onBrandClick={()=>setBrandModal(true)} onTheme={()=>setTheme(theme==='light'?'dark':'light')} onNotify={()=>toast('۳ اعلان جدید دارید')}/><main>{page==='dashboard'&&<Dashboard/>}{page==='audit'&&<BrandAudit/>}{page==='roadmap'&&<Roadmap/>}{page==='content'&&<ContentAI/>}{page==='settings'&&<Settings onToast={toast}/>} {!['dashboard','audit','roadmap','content','settings'].includes(page)&&<WorkspacePage page={page} toast={toast}/>}</main></div>{brandModal&&<AddBrand onClose={()=>setBrandModal(false)} onAdd={b=>{setBrand(b);setBrandModal(false);toast('برند جدید ساخته شد')}}/>}{toastMessage&&<Toast message={toastMessage} onClose={()=>setToastMessage('')}/>}<button onClick={()=>setMobile(!mobile)} className="md:hidden fixed bottom-5 right-5 z-50 w-12 h-12 rounded-full text-white" style={{background:'var(--primary)'}}>☰</button>{mobile&&<div className="md:hidden fixed inset-0 z-40" style={{background:'#0b102099'}} onClick={()=>setMobile(false)}><div className="absolute right-0 top-0 bottom-0 w-72 p-5" style={{background:'var(--card)'}}><b className="text-xl">Nesharo</b><div className="mt-8">{nav.map(x=><button key={x.id} onClick={()=>navigate(x.id)} className="block w-full p-3 text-right">{x.icon} {x.label}</button>)}</div></div></div>}</div>}
+type Page = "dashboard" | "audit" | "roadmap" | "content" | "calendar" | "competitors" | "analytics" | "reports" | "billing" | "settings"
+const nav: { id: Page; icon: string; label: string }[] = [
+  { id: "dashboard", icon: "⌂", label: "داشبورد" },
+  { id: "audit", icon: "◈", label: "Brand Audit" },
+  { id: "roadmap", icon: "◌", label: "Roadmap" },
+  { id: "content", icon: "✦", label: "Content AI" },
+  { id: "calendar", icon: "□", label: "تقویم محتوا" },
+  { id: "competitors", icon: "◎", label: "رقبا" },
+  { id: "analytics", icon: "↗", label: "آنالیتیکس" },
+  { id: "reports", icon: "▤", label: "گزارش‌ها" },
+]
+function Toast({ message, onClose }: { message: string; onClose: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 2800)
+    return () => clearTimeout(timer)
+  }, [message, onClose])
+  return (
+    <div
+      className="fixed bottom-5 left-5 z-[80] rounded-xl px-4 py-3 shadow-xl"
+      style={{ background: "var(--foreground)", color: "var(--card)" }}
+    >
+      ✓ {message} <button onClick={onClose}>×</button>
+    </div>
+  )
+}
+function BrandModal({
+  onClose,
+  onAdd,
+}: {
+  onClose: () => void
+  onAdd: (brand: Brand) => void
+}) {
+  const [name, setName] = useState("")
+  const [industry, setIndustry] = useState("")
+  const [step, setStep] = useState(1)
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "#0b102066" }}
+    >
+      <div
+        className="w-full max-w-lg rounded-2xl p-6"
+        style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+      >
+        <div className="flex justify-between mb-6">
+          <div>
+            <small style={{ color: "var(--muted-foreground)" }}>
+              گام {step} از ۲
+            </small>
+            <h2 className="text-xl font-bold">افزودن برند جدید</h2>
+          </div>
+          <button onClick={onClose}>×</button>
+        </div>
+        {step === 1 ? (
+          <div className="space-y-4">
+            <Field
+              label="نام برند"
+              value={name}
+              onChange={setName}
+              placeholder="آکادمی رشد"
+            />
+            <Field
+              label="حوزه فعالیت"
+              value={industry}
+              onChange={setIndustry}
+              placeholder="کوچینگ کسب‌وکار"
+            />
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <Field
+              label="مخاطب هدف"
+              value=""
+              onChange={() => {}}
+              placeholder="کارآفرینان جوان"
+            />
+            <label className="block text-sm">
+              لحن برند
+              <select
+                className="w-full mt-2 rounded-xl p-3"
+                style={{
+                  background: "var(--secondary)",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                <option>آموزشی و صمیمی</option>
+                <option>حرفه‌ای و مطمئن</option>
+              </select>
+            </label>
+          </div>
+        )}
+        <div className="flex gap-3 mt-7">
+          <button
+            onClick={step === 1 ? onClose : () => setStep(1)}
+            className="flex-1 py-3 rounded-xl"
+            style={{ background: "var(--secondary)" }}
+          >
+            انصراف
+          </button>
+          <button
+            onClick={() =>
+              step === 1
+                ? setStep(2)
+                : onAdd({
+                    id: Date.now().toString(),
+                    name: name || "برند جدید",
+                    handle: "@new.brand",
+                    industry: industry || "حوزه فعالیت",
+                    audience: "مخاطبان شما",
+                    tone: "آموزشی و صمیمی",
+                    score: 0,
+                  })
+            }
+            className="flex-1 py-3 rounded-xl text-white"
+            style={{ background: "var(--primary)" }}
+          >
+            {step === 1 ? "ادامه" : "ساخت برند"}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  placeholder: string
+}) {
+  return (
+    <label className="block text-sm">
+      {label}
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full mt-2 rounded-xl p-3"
+        style={{
+          background: "var(--secondary)",
+          border: "1px solid var(--border)",
+          outline: "none",
+        }}
+      />
+    </label>
+  )
+}
+function Sidebar({
+  page,
+  setPage,
+  brand,
+  onBrandClick,
+  onExit,
+}: {
+  page: Page
+  setPage: (page: Page) => void
+  brand: Brand
+  onBrandClick: () => void
+  onExit: () => void
+}) {
+  return (
+    <aside
+      className="fixed right-0 top-0 bottom-0 hidden w-64 flex-col md:flex"
+      style={{
+        background: "var(--card)",
+        borderLeft: "1px solid var(--border)",
+        zIndex: 40,
+      }}
+    >
+      <div className="p-5 border-b" style={{ borderColor: "var(--border)" }}>
+        <div className="flex items-center gap-2">
+          <div
+            className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold"
+            style={{ background: "linear-gradient(135deg,#6d28d9,#8b5cf6)" }}
+          >
+            N
+          </div>
+          <div>
+            <b>Nesharo</b>
+            <div
+              className="text-[11px]"
+              style={{ color: "var(--muted-foreground)" }}
+            >
+              Brand Intelligence
+            </div>
+          </div>
+        </div>
+      </div>
+      <button
+        onClick={onBrandClick}
+        className="m-4 rounded-xl p-3 text-right"
+        style={{
+          background: "var(--secondary)",
+          border: "1px solid var(--border)",
+        }}
+      >
+        ◈ <span className="text-sm font-semibold">{brand.name}</span>
+        <span className="float-left">⌄</span>
+      </button>
+      <nav className="flex-1 overflow-y-auto px-3">
+        <div
+          className="px-3 pb-2 text-[11px]"
+          style={{ color: "var(--muted-foreground)" }}
+        >
+          WORKSPACE
+        </div>
+        {nav.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => setPage(item.id)}
+            className={`w-full flex items-center gap-3 rounded-xl px-3 py-3 mb-1 text-right ${
+              page === item.id ? "nav-active" : ""
+            }`}
+          >
+            <span className="w-5 text-center">{item.icon}</span>
+            <span className="text-sm">{item.label}</span>
+          </button>
+        ))}
+        <div
+          className="px-3 pt-5 pb-2 text-[11px]"
+          style={{ color: "var(--muted-foreground)" }}
+        >
+          حساب
+        </div>
+        {[
+          ["billing", "اشتراک و صورتحساب"],
+          ["settings", "تنظیمات"],
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setPage(id as Page)}
+            className={`w-full flex items-center gap-3 rounded-xl px-3 py-3 mb-1 text-right ${
+              page === id ? "nav-active" : ""
+            }`}
+          >
+            <span>⚙</span>
+            <span className="text-sm">{label}</span>
+          </button>
+        ))}
+      </nav>
+      <button
+        onClick={onExit}
+        className="m-4 p-3 text-sm text-right"
+        style={{
+          color: "var(--muted-foreground)",
+          borderTop: "1px solid var(--border)",
+        }}
+      >
+        ↩ خروج
+      </button>
+    </aside>
+  )
+}
+function Header({
+  brand,
+  onTheme,
+  onBrandClick,
+  onNotify,
+}: {
+  brand: Brand
+  onTheme: () => void
+  onBrandClick: () => void
+  onNotify: () => void
+}) {
+  return (
+    <header
+      className="sticky top-0 z-30 flex items-center gap-3 px-5 py-3 md:px-8"
+      style={{
+        background: "var(--background)dd",
+        backdropFilter: "blur(14px)",
+        borderBottom: "1px solid var(--border)",
+      }}
+    >
+      <button
+        className="hidden md:block rounded-xl px-3 py-2 text-sm"
+        style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+        onClick={onBrandClick}
+      >
+        ◈ {brand.name} ⌄
+      </button>
+      <div className="mr-auto flex gap-2">
+        <button
+          onClick={onTheme}
+          className="w-9 h-9 rounded-xl"
+          style={{
+            background: "var(--card)",
+            border: "1px solid var(--border)",
+          }}
+        >
+          ☼
+        </button>
+        <button
+          onClick={onNotify}
+          className="w-9 h-9 rounded-xl"
+          style={{
+            background: "var(--card)",
+            border: "1px solid var(--border)",
+          }}
+        >
+          ♢
+        </button>
+        <div
+          className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold"
+          style={{ background: "var(--primary)" }}
+        >
+          آ
+        </div>
+      </div>
+    </header>
+  )
+}
+function WorkspacePage({
+  page,
+  toast,
+}: {
+  page: Page
+  toast: (value: string) => void
+}) {
+  const data: Record<string, [string, string[]]> = {
+    calendar: [
+      "تقویم محتوا",
+      [
+        "شنبه · کاروسل آموزشی · آماده",
+        "دوشنبه · ریلز قبل و بعد لوگو · برنامه‌ریزی",
+      ],
+    ],
+    competitors: [
+      "هوش رقابتی",
+      [
+        "@design.school · ۸۲K · تعامل ۶.۲٪",
+        "@creativecoach · ۴۶K · تعامل ۵.۸٪",
+      ],
+    ],
+    analytics: [
+      "آنالیتیکس",
+      [
+        "فالوور · ۴۲,۱۸۰ · +۳.۲٪",
+        "Reach · ۱۸۲K · +۱۸٪",
+        "Engagement · ۸.۴٪ · +۱.۱٪",
+      ],
+    ],
+    reports: [
+      "گزارش‌ها",
+      ["گزارش ماهانه رشد · آماده دریافت", "تحلیل برند · ۲ ساعت پیش"],
+    ],
+    billing: [
+      "اشتراک و صورتحساب",
+      ["پلن فعلی · Pro", "مصرف این ماه · ۶۴٪", "تمدید بعدی · ۲۸ شهریور ۱۴۰۳"],
+    ],
+  }
+  const [title, items] = data[page] || data.analytics
+  return (
+    <div className="p-5 md:p-8 max-w-6xl mx-auto">
+      <h1 className="text-2xl font-bold">{title}</h1>
+      <div className="grid md:grid-cols-3 gap-4 my-8">
+        {["این هفته", "این ماه", "امتیاز برند"].map((item, i) => (
+          <div
+            key={item}
+            className="rounded-2xl p-5"
+            style={{
+              background: "var(--card)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            <small style={{ color: "var(--muted-foreground)" }}>{item}</small>
+            <b className="text-2xl block mt-3">{["۱۲", "۴۸", "۷۲"][i]}</b>
+          </div>
+        ))}
+      </div>
+      <div
+        className="rounded-2xl p-5"
+        style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+      >
+        {items.map((item) => (
+          <div
+            key={item}
+            className="p-4 rounded-xl mb-2"
+            style={{ background: "var(--secondary)" }}
+          >
+            {item}
+            <button
+              onClick={() => toast("خروجی آماده شد")}
+              className="float-left text-xs"
+            >
+              جزئیات
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+function AppWorkspace() {
+  const [inApp, setInApp] = useState(false)
+  const [page, setPage] = useState<Page>("dashboard")
+  const [brand, setBrand] = useState(brands[0])
+  const [brandModal, setBrandModal] = useState(false)
+  const [toastMessage, setToastMessage] = useState("")
+  const [theme, setTheme] = useState<"light" | "dark">("light")
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+  }, [theme])
+  const toast = (value: string) => setToastMessage(value)
+  if (!inApp) return <Landing onEnterApp={() => setInApp(true)} />
+  return (
+    <div className="min-h-screen">
+      <Sidebar
+        page={page}
+        setPage={setPage}
+        brand={brand}
+        onBrandClick={() => setBrandModal(true)}
+        onExit={() => setInApp(false)}
+      />
+      <div className="md:mr-64">
+        <Header
+          brand={brand}
+          onBrandClick={() => setBrandModal(true)}
+          onTheme={() => setTheme(theme === "light" ? "dark" : "light")}
+          onNotify={() => toast("۳ اعلان جدید دارید")}
+        />
+        <main>
+          {page === "dashboard" && <Dashboard />}
+          {page === "audit" && <BrandAudit />}
+          {page === "roadmap" && <Roadmap />}
+          {page === "content" && <ContentAI />}
+          {page === "settings" && <Settings onToast={toast} />}{" "}
+          {!["dashboard", "audit", "roadmap", "content", "settings"].includes(
+            page,
+          ) && <WorkspacePage page={page} toast={toast} />}
+        </main>
+      </div>
+      {brandModal && (
+        <BrandModal
+          onClose={() => setBrandModal(false)}
+          onAdd={(newBrand) => {
+            setBrand(newBrand)
+            setBrandModal(false)
+            toast("برند جدید ساخته شد")
+          }}
+        />
+      )}
+      {toastMessage && (
+        <Toast message={toastMessage} onClose={() => setToastMessage("")} />
+      )}
+    </div>
+  )
+}
+export default function App() {
+  const [notice, setNotice] = useState("")
+  const path = window.location.pathname
+  if (path === "/pricing-plans") return <PricingPlans onToast={setNotice} />
+  if (path.startsWith("/admin"))
+    return (
+      <AdminPanel
+        onLogout={() => {
+          window.location.href = "/"
+        }}
+      />
+    )
+  return (
+    <>
+      <AppWorkspace />
+      {notice && (
+        <div
+          className="fixed bottom-5 left-5 z-50 rounded-xl px-4 py-3 text-white"
+          style={{ background: "var(--foreground)" }}
+        >
+          {notice}
+        </div>
+      )}
+    </>
+  )
+}
