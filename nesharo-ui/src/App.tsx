@@ -8,7 +8,9 @@ import Settings from "./pages/Settings"
 import PricingPlans from "./pages/PricingPlans"
 import AdminPanel from "./pages/AdminPanel"
 import AuthFlow from "./pages/AuthFlow"
-import { brands, type Brand } from "./data"
+import { type Brand } from "./data"
+import { api } from "./services/apiClient"
+import { useAppState } from "./state/AppContext"
 
 type Page = "dashboard" | "audit" | "roadmap" | "content" | "calendar" | "competitors" | "analytics" | "reports" | "billing" | "settings"
 const nav: { id: Page; icon: string; label: string }[] = [
@@ -406,27 +408,56 @@ function WorkspacePage({
     </div>
   )
 }
+function AdminGate({ onLogout }: { onLogout: () => void }) {
+  const [allowed, setAllowed] = useState<boolean | null>(null)
+  useEffect(() => {
+    api.profile()
+      .then(({ user }) => setAllowed(user.role === "ADMIN" || user.role === "SUPER_ADMIN"))
+      .catch(() => setAllowed(false))
+  }, [])
+  if (allowed === null) return <div className="min-h-screen flex items-center justify-center">در حال بررسی دسترسی...</div>
+  if (!allowed) return <Landing onEnterApp={onLogout} />
+  return <AdminPanel onLogout={onLogout} />
+}
+
 function AppWorkspace() {
+  const { setSession, activeBrand, addBrand } = useAppState()
   const [inApp, setInApp] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
   const [adminPath, setAdminPath] = useState(false)
   const [page, setPage] = useState<Page>("dashboard")
-  const [brand, setBrand] = useState(brands[0])
+  const [brand, setBrand] = useState(activeBrand)
   const [brandModal, setBrandModal] = useState(false)
   const [toastMessage, setToastMessage] = useState("")
   const [theme, setTheme] = useState<"light" | "dark">("light")
   useEffect(() => {
     document.documentElement.dataset.theme = theme
   }, [theme])
+  useEffect(() => {
+    setBrand(activeBrand)
+  }, [activeBrand])
   const toast = (value: string) => setToastMessage(value)
-  if (adminPath) return <AdminPanel onLogout={() => setAdminPath(false)} />
+  const logout = async () => {
+    try {
+      await api.logout()
+    } finally {
+      setSession(null)
+      setInApp(false)
+    }
+  }
+  if (adminPath) return <AdminGate onLogout={() => setAdminPath(false)} />
   if (!inApp)
     return (
       <>
         <Landing onEnterApp={() => setAuthOpen(true)} />
         {authOpen && (
           <AuthFlow
-            onSuccess={() => {
+            onSuccess={(result) => {
+              setSession({
+                phone: result.user.phone ?? "",
+                firstName: result.user.firstName ?? "",
+                role: result.user.role,
+              })
               setAuthOpen(false)
               setInApp(true)
             }}
@@ -445,7 +476,7 @@ function AppWorkspace() {
         setPage={setPage}
         brand={brand}
         onBrandClick={() => setBrandModal(true)}
-        onExit={() => setInApp(false)}
+        onExit={logout}
       />
       <div className="md:mr-64">
         <Header
@@ -468,10 +499,28 @@ function AppWorkspace() {
       {brandModal && (
         <BrandModal
           onClose={() => setBrandModal(false)}
-          onAdd={(newBrand) => {
-            setBrand(newBrand)
-            setBrandModal(false)
-            toast("برند جدید ساخته شد")
+          onAdd={async (newBrand) => {
+            try {
+              const saved = await api.createBrand({
+                name: newBrand.name,
+                industry: newBrand.industry,
+                audience: newBrand.audience,
+                tone: newBrand.tone,
+              })
+              const mapped = {
+                ...newBrand,
+                id: saved.id,
+                industry: saved.industry ?? newBrand.industry,
+                audience: saved.audience ?? newBrand.audience,
+                tone: saved.tone ?? newBrand.tone,
+              }
+              addBrand(mapped)
+              setBrand(mapped)
+              setBrandModal(false)
+              toast("برند جدید ساخته شد")
+            } catch (error) {
+              toast(error instanceof Error ? error.message : "ساخت برند انجام نشد")
+            }
           }}
         />
       )}
@@ -486,13 +535,7 @@ export default function App() {
   const path = window.location.pathname
   if (path === "/pricing-plans") return <PricingPlans onToast={setNotice} />
   if (path.startsWith("/admin"))
-    return (
-      <AdminPanel
-        onLogout={() => {
-          window.location.href = "/"
-        }}
-      />
-    )
+    return <AdminGate onLogout={() => { window.location.href = "/" }} />
   return (
     <>
       <AppWorkspace />
