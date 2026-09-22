@@ -1,0 +1,10 @@
+{
+  "description": "Generates detailed UI/UX design prompts from business plans to create professional, user-friendly digital product prototypes tailored to project goals.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
