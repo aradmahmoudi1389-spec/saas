@@ -22,6 +22,22 @@ pnpm prisma migrate dev --name init
 pnpm dev
 ```
 
+## Supabase PostgreSQL
+
+Create a Supabase project and copy its connection strings into `.env`:
+
+- `DATABASE_URL` should use the Supavisor transaction pooler on port `6543` with `pgbouncer=true` for the API runtime.
+- `DIRECT_URL` should use the direct database host on port `5432` for Prisma migrations.
+- Keep both values server-side and never expose them through frontend environment variables.
+
+Run migrations against the direct connection:
+
+```bash
+pnpm prisma migrate dev --name init
+```
+
+For CI or deployment, set `DATABASE_URL` and `DIRECT_URL` as encrypted environment variables before running Prisma commands.
+
 Swagger UI is available at `/docs`; health check is `/health`.
 
 No external provider is active by default. Configure credentials through environment variables or an admin-only secret manager integration. Never put provider keys in frontend code.
