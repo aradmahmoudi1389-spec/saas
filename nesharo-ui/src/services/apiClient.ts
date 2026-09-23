@@ -13,7 +13,7 @@ export type ApiBrand = {
   positioning?: string | null
 }
 
-const baseUrl = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1"
+const baseUrl = import.meta.env.VITE_API_URL ?? "https://saas-bg0w.onrender.com/api/v1"
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${baseUrl}${path}`, {
