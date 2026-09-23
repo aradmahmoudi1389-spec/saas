@@ -13,7 +13,8 @@ export type ApiBrand = {
   positioning?: string | null
 }
 
-const baseUrl = import.meta.env.VITE_API_URL ?? "https://saas-bg0w.onrender.com/api/v1"
+const configuredBaseUrl = import.meta.env.VITE_API_URL
+const baseUrl = configuredBaseUrl || "https://saas-bg0w.onrender.com/api/v1"
 const accessTokenKey = "nesharo.access-token"
 
 export function saveAccessToken(token: string) {
