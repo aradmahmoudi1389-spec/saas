@@ -8,11 +8,21 @@ import Settings from "./pages/Settings"
 import PricingPlans from "./pages/PricingPlans"
 import AdminPanel from "./pages/AdminPanel"
 import AuthFlow from "./pages/AuthFlow"
+import Profile from "./pages/Profile"
 import { type Brand } from "./data"
 import { api } from "./services/apiClient"
 import { useAppState } from "./state/AppContext"
 
-type Page = "dashboard" | "audit" | "roadmap" | "content" | "calendar" | "competitors" | "analytics" | "reports" | "billing" | "settings"
+type Page = "dashboard" | "audit" | "roadmap" | "content" | "calendar" | "competitors" | "analytics" | "reports" | "billing" | "settings" | "profile"
+
+const basePath = import.meta.env.BASE_URL.replace(/\/$/, "")
+export function appUrl(path: string) {
+  return `${basePath}${path}`
+}
+function routeFromLocation() {
+  const path = window.location.pathname.replace(basePath, "") || "/"
+  return path.endsWith("/") && path !== "/" ? path.slice(0, -1) : path
+}
 const nav: { id: Page; icon: string; label: string }[] = [
   { id: "dashboard", icon: "⌂", label: "داشبورد" },
   { id: "audit", icon: "◈", label: "Brand Audit" },
@@ -242,6 +252,7 @@ function Sidebar({
         </div>
         {[
           ["billing", "اشتراک و صورتحساب"],
+          ["profile", "پروفایل"],
           ["settings", "تنظیمات"],
         ].map(([id, label]) => (
           <button
@@ -420,12 +431,16 @@ function AdminGate({ onLogout }: { onLogout: () => void }) {
   return <AdminPanel onLogout={onLogout} />
 }
 
-function AppWorkspace() {
+function AppWorkspace({ initialPage = "dashboard", onRoute }: { initialPage?: Page; onRoute?: (page: Page) => void }) {
   const { setSession, activeBrand, addBrand } = useAppState()
   const [inApp, setInApp] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
   const [adminPath, setAdminPath] = useState(false)
-  const [page, setPage] = useState<Page>("dashboard")
+  const [page, setPage] = useState<Page>(initialPage)
+  const navigate = (next: Page) => {
+    setPage(next)
+    onRoute?.(next)
+  }
   const [brand, setBrand] = useState(activeBrand)
   const [brandModal, setBrandModal] = useState(false)
   const [toastMessage, setToastMessage] = useState("")
@@ -498,8 +513,9 @@ function AppWorkspace() {
           {page === "audit" && <BrandAudit />}
           {page === "roadmap" && <Roadmap />}
           {page === "content" && <ContentAI />}
-          {page === "settings" && <Settings onToast={toast} />}{" "}
-          {!["dashboard", "audit", "roadmap", "content", "settings"].includes(
+          {page === "settings" && <Settings onToast={toast} />}
+          {page === "profile" && <Profile onToast={toast} />}
+          {!["dashboard", "audit", "roadmap", "content", "settings", "profile"].includes(
             page,
           ) && <WorkspacePage page={page} toast={toast} />}
         </main>
@@ -540,13 +556,13 @@ function AppWorkspace() {
 }
 export default function App() {
   const [notice, setNotice] = useState("")
-  const path = window.location.pathname
-  if (path === "/pricing-plans") return <PricingPlans onToast={setNotice} />
-  if (path.startsWith("/admin"))
-    return <AdminGate onLogout={() => { window.location.href = "/" }} />
+  const route = routeFromLocation()
+  const goHome = () => { window.location.href = appUrl("/") }
+  if (route === "/pricing-plans") return <PricingPlans onToast={setNotice} />
+  if (route.startsWith("/admin")) return <AdminGate onLogout={goHome} />
   return (
     <>
-      <AppWorkspace />
+      <AppWorkspace initialPage={route === "/profile" ? "profile" : "dashboard"} onRoute={(page) => window.history.replaceState(null, "", appUrl(`/${page}`))} />
       {notice && (
         <div
           className="fixed bottom-5 left-5 z-50 rounded-xl px-4 py-3 text-white"

@@ -5,7 +5,7 @@ import helmet from '@fastify/helmet'
 import rateLimit from '@fastify/rate-limit'
 import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
-import { ZodError } from 'zod'
+import { ZodError, z } from 'zod'
 import { env } from './config/env.js'
 import { closeDatabase } from './db/client.js'
 import { authRoutes } from './modules/auth/routes.js'
@@ -13,6 +13,17 @@ import { brandRoutes } from './modules/brand/routes.js'
 import { dashboardRoutes, roadmapRoutes } from './modules/dashboardRoutes.js'
 import { requireAuth, requireRole } from './middleware/auth.js'
 import { prisma } from './db/client.js'
+
+const profileSchema = z.object({
+  imageUrl: z.string().url().nullable().optional(),
+  bio: z.string().max(1000).nullable().optional(),
+  profession: z.string().max(120).nullable().optional(),
+  niche: z.string().max(120).nullable().optional(),
+  targetAudience: z.string().max(500).nullable().optional(),
+  productsServices: z.string().max(1000).nullable().optional(),
+  mainGoal: z.string().max(500).nullable().optional(),
+  instagramHandle: z.string().max(120).nullable().optional(),
+})
 
 export function buildApp() {
   const app = Fastify({ logger: env.NODE_ENV !== 'test', trustProxy: true })
@@ -29,6 +40,15 @@ export function buildApp() {
   app.register(dashboardRoutes, { prefix: '/api/v1/dashboard' })
   app.register(roadmapRoutes, { prefix: '/api/v1/roadmap' })
   app.get('/api/v1/profile', { preHandler: requireAuth }, async (request, reply) => { const profile = await prisma.profile.findUnique({ where: { userId: request.user!.id }, include: { user: { select: { id: true, phone: true, email: true, firstName: true, lastName: true, role: true } } } }); if (!profile) return reply.code(404).send({ ok: false, error: { code: 'PROFILE_NOT_FOUND', message: 'پروفایل پیدا نشد.' } }); return { ok: true, data: profile } })
+  app.patch('/api/v1/profile', { preHandler: requireAuth }, async (request) => {
+    const input = profileSchema.parse(request.body)
+    const existing = await prisma.profile.findUnique({ where: { userId: request.user!.id } })
+    const saved = existing
+      ? await prisma.profile.update({ where: { userId: request.user!.id }, data: input })
+      : await prisma.profile.create({ data: { ...input, userId: request.user!.id } })
+    const user = await prisma.user.findUnique({ where: { id: request.user!.id }, select: { id: true, phone: true, email: true, firstName: true, lastName: true, role: true } })
+    return { ok: true, data: { ...saved, user, onboardingComplete: Boolean(saved.profession && saved.targetAudience) } }
+  })
   app.get('/api/v1/admin/stats', { preHandler: [requireAuth, requireRole('ADMIN', 'SUPER_ADMIN')] }, async () => { const [users, brands, analyses, payments] = await Promise.all([prisma.user.count(), prisma.brandProfile.count(), prisma.brandAnalysis.count(), prisma.payment.aggregate({ _sum: { amount: true }, where: { status: 'PAID' } })]); return { ok: true, data: { users, brands, analyses, paidAmount: payments._sum.amount ?? 0 } } })
   app.setErrorHandler((error, request, reply) => { if (error instanceof ZodError) return reply.code(400).send({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'اطلاعات ورودی معتبر نیست.', details: error.flatten() } }); request.log.error(error); return reply.code((error as { statusCode?: number }).statusCode ?? 500).send({ ok: false, error: { code: 'INTERNAL_ERROR', message: 'خطای داخلی سرویس.' } }) })
   return app
