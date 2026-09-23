@@ -8,11 +8,37 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-enum Role { USER ADMIN SUPER_ADMIN }
-enum AnalysisStatus { QUEUED RUNNING COMPLETED FAILED }
-enum TaskStatus { TODO IN_PROGRESS DONE }
-enum SubscriptionStatus { ACTIVE PAST_DUE CANCELED }
-enum PaymentStatus { PENDING PAID FAILED REFUNDED }
+enum Role {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum AnalysisStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
 
 model User {
   id              String          @id @default(cuid())
