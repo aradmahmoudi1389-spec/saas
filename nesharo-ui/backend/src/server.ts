@@ -22,6 +22,7 @@ export function buildApp() {
   app.register(rateLimit, { max: 120, timeWindow: '1 minute' })
   app.register(swagger, { openapi: { info: { title: 'Nesharo API', version: '1.0.0' }, servers: [{ url: `http://localhost:${env.PORT}` }] } })
   app.register(swaggerUi, { routePrefix: '/docs' })
+  app.get('/', async () => ({ ok: true, data: { service: 'nesharo-api', docs: '/docs', health: '/health' } }))
   app.get('/health', async () => ({ ok: true, data: { service: 'nesharo-api', status: 'healthy' } }))
   app.register(authRoutes, { prefix: '/api/v1/auth' })
   app.register(brandRoutes, { prefix: '/api/v1/brands' })
