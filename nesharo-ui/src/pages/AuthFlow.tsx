@@ -6,7 +6,7 @@ export default function AuthFlow({
   onAdmin,
 }: {
   onSuccess: (result: AuthResult) => void
-  onAdmin: () => void
+  onAdmin: (result: AuthResult) => void
 }) {
   const [phone, setPhone] = useState("")
   const [code, setCode] = useState("")
@@ -16,6 +16,7 @@ export default function AuthFlow({
   const [step, setStep] = useState<"phone" | "otp">("phone")
   const [message, setMessage] = useState("")
   const [busy, setBusy] = useState(false)
+  const [adminLogin, setAdminLogin] = useState(false)
 
   const send = () => {
     if (!/^09\d{9}$/.test(phone)) return setMessage("شماره موبایل را کامل وارد کنید.")
@@ -33,7 +34,7 @@ export default function AuthFlow({
       const result = mode === "register"
         ? await api.register({ phone, password, firstName })
         : await api.login({ phone, password })
-      onSuccess(result)
+      adminLogin ? onAdmin(result) : onSuccess(result)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "ورود انجام نشد.")
     } finally {
@@ -44,9 +45,9 @@ export default function AuthFlow({
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: "#0b102066" }}>
       <div className="w-full max-w-md rounded-2xl p-6" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-        <div className="flex justify-between"><div><div className="text-xs" style={{ color: "var(--muted-foreground)" }}>Nesharo Authentication</div><h2 className="text-xl font-bold mt-2">{step === "phone" ? "ورود به حساب" : "تأیید شماره موبایل"}</h2></div><button onClick={onAdmin} className="text-xs" style={{ color: "var(--muted-foreground)" }}>ورود ادمین</button></div>
+        <div className="flex justify-between"><div><div className="text-xs" style={{ color: "var(--muted-foreground)" }}>Nesharo Authentication</div><h2 className="text-xl font-bold mt-2">{step === "phone" ? (adminLogin ? "ورود به پنل ادمین" : "ورود به حساب") : "تأیید شماره موبایل"}</h2></div><button onClick={() => { setAdminLogin(true); setMode("login"); setMessage("با حساب دارای دسترسی ادمین وارد شوید.") }} className="text-xs" style={{ color: "var(--muted-foreground)" }}>ورود ادمین</button></div>
         {step === "phone" ? <>
-          <div className="flex gap-2 mt-6">{([["register", "ثبت‌نام"], ["login", "ورود"]] as const).map(([value, label]) => <button key={value} onClick={() => setMode(value)} className="flex-1 py-2 rounded-xl text-sm" style={{ background: mode === value ? "var(--primary)" : "var(--secondary)", color: mode === value ? "#fff" : "var(--foreground)" }}>{label}</button>)}</div>
+          <div className="flex gap-2 mt-6">{([["register", "ثبت‌نام"], ["login", "ورود"]] as const).map(([value, label]) => <button key={value} onClick={() => { setMode(value); setAdminLogin(false) }} className="flex-1 py-2 rounded-xl text-sm" style={{ background: mode === value ? "var(--primary)" : "var(--secondary)", color: mode === value ? "#fff" : "var(--foreground)" }}>{label}</button>)}</div>
           {mode === "register" && <label className="block text-sm mt-5">نام و نام خانوادگی<input value={firstName} onChange={(e) => setFirstName(e.target.value)} className="w-full mt-2 p-3 rounded-xl" style={{ background: "var(--secondary)", border: "1px solid var(--border)", outline: "none" }} /></label>}
           <label className="block text-sm mt-4">شماره موبایل<input value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))} dir="ltr" maxLength={11} placeholder="09121234567" className="w-full mt-2 p-3 rounded-xl" style={{ background: "var(--secondary)", border: "1px solid var(--border)", outline: "none" }} /></label>
           <label className="block text-sm mt-4">رمز عبور<input value={password} onChange={(e) => setPassword(e.target.value)} type="password" dir="ltr" className="w-full mt-2 p-3 rounded-xl" style={{ background: "var(--secondary)", border: "1px solid var(--border)", outline: "none" }} /></label>
