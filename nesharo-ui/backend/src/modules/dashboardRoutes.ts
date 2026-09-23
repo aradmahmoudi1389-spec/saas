@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { prisma } from '../../db/client.js'
-import { requireAuth } from '../../middleware/auth.js'
+import { prisma } from '../db/client.js'
+import { requireAuth } from '../middleware/auth.js'
 
 export async function dashboardRoutes(app: FastifyInstance) {
   app.get('/', { preHandler: requireAuth }, async (request, reply) => {
