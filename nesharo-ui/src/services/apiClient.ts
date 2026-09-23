@@ -39,11 +39,19 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  logout: () => apiRequest<null>("/auth/logout", { method: "POST" }),
   profile: () =>
     apiRequest<{
-      user: { id: string; phone: string | null; email: string | null; firstName: string | null; lastName: string | null; role: "USER" | "ADMIN" | "SUPER_ADMIN" }
+      user: {
+        id: string
+        phone: string | null
+        email: string | null
+        firstName: string | null
+        lastName: string | null
+        role: "USER" | "ADMIN" | "SUPER_ADMIN"
+      }
     }>("/profile"),
-
+  dashboard: () =>
     apiRequest<{
       brands: ApiBrand[]
       analysis: unknown
