@@ -4,6 +4,8 @@ WORKDIR /app
 COPY nesharo-ui/backend/package*.json ./
 RUN npm install
 
+ENV DATABASE_URL="postgresql://postgres:postgres@localhost:5432/postgres" \
+    DIRECT_URL="postgresql://postgres:postgres@localhost:5432/postgres"
 COPY nesharo-ui/backend/prisma ./prisma
 RUN npx prisma generate
 COPY nesharo-ui/backend/tsconfig.json ./
