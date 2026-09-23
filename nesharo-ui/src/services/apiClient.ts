@@ -51,6 +51,8 @@ export const api = {
         role: "USER" | "ADMIN" | "SUPER_ADMIN"
       }
     }>("/profile"),
+  updateProfile: (body: Record<string, string | null>) =>
+    apiRequest<unknown>("/profile", { method: "PATCH", body: JSON.stringify(body) }),
   dashboard: () =>
     apiRequest<{
       brands: ApiBrand[]
