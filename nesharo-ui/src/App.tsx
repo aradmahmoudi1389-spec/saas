@@ -434,7 +434,7 @@ function AdminGate({ onLogout }: { onLogout: () => void }) {
 function AppWorkspace({ initialPage = "dashboard", onRoute }: { initialPage?: Page; onRoute?: (page: Page) => void }) {
   const { setSession, activeBrand, addBrand } = useAppState()
   const [inApp, setInApp] = useState(false)
-  const [authOpen, setAuthOpen] = useState(false)
+  const [authOpen, setAuthOpen] = useState(initialPage === "profile")
   const [adminPath, setAdminPath] = useState(false)
   const [page, setPage] = useState<Page>(initialPage)
   const navigate = (next: Page) => {
@@ -486,7 +486,13 @@ function AppWorkspace({ initialPage = "dashboard", onRoute }: { initialPage?: Pa
               setAuthOpen(false)
               setInApp(true)
             }}
-            onAdmin={() => {
+            onAdmin={(result) => {
+              saveAccessToken(result.accessToken)
+              setSession({
+                phone: result.user.phone ?? "",
+                firstName: result.user.firstName ?? "",
+                role: result.user.role,
+              })
               setAuthOpen(false)
               setAdminPath(true)
             }}
