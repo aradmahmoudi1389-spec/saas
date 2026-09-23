@@ -1,4 +1,6 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { api } from "../services/apiClient"
+import { useAppState } from "../state/AppContext"
 
 const scoreCategories = [
   { label: "Positioning", score: 65, weight: "20%", color: "#7c3aed" },
@@ -104,7 +106,21 @@ function ScoreRing({ score }: { score: number }) {
 }
 
 export default function Dashboard() {
+  const { session, activeBrand } = useAppState()
   const [activeTab, setActiveTab] = useState<"week" | "month">("week")
+  const [score, setScore] = useState(activeBrand.score)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+    api.dashboard()
+      .then(({ analysis }) => {
+        if (mounted && analysis && typeof analysis === "object" && "score" in analysis && typeof analysis.score === "number") setScore(analysis.score)
+      })
+      .catch(() => undefined)
+      .finally(() => mounted && setLoading(false))
+    return () => { mounted = false }
+  }, [activeBrand.id])
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto">
@@ -122,10 +138,10 @@ export default function Dashboard() {
               className="text-xl font-semibold"
               style={{ color: "var(--foreground)" }}
             >
-              سلام آرمین 👋
+              سلام {session?.firstName || "کاربر"}
             </h1>
             <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-              @armin.design · آخرین تحلیل: ۲ ساعت پیش
+              {activeBrand.handle} · {loading ? "در حال بارگذاری..." : "داده‌های حساب شما"}
             </p>
           </div>
         </div>
@@ -146,7 +162,7 @@ export default function Dashboard() {
           >
             Brand Score
           </div>
-          <ScoreRing score={overallScore} />
+          <ScoreRing score={score} />
           <div className="w-full mt-6 space-y-3">
             {scoreCategories.map((cat) => (
               <div key={cat.label}>

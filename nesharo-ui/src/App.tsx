@@ -436,6 +436,14 @@ function AppWorkspace() {
   useEffect(() => {
     setBrand(activeBrand)
   }, [activeBrand])
+  useEffect(() => {
+    api.profile()
+      .then(({ user }) => {
+        setSession({ phone: user.phone ?? "", firstName: user.firstName ?? "", role: user.role })
+        setInApp(true)
+      })
+      .catch(() => undefined)
+  }, [setSession])
   const toast = (value: string) => setToastMessage(value)
   const logout = async () => {
     try {
