@@ -10,18 +10,18 @@ import AdminPanel from "./pages/AdminPanel"
 import AuthFlow from "./pages/AuthFlow"
 import Profile from "./pages/Profile"
 import { type Brand } from "./data"
-import { api } from "./services/apiClient"
+import { api, clearAccessToken, saveAccessToken } from "./services/apiClient"
 import { useAppState } from "./state/AppContext"
 
 type Page = "dashboard" | "audit" | "roadmap" | "content" | "calendar" | "competitors" | "analytics" | "reports" | "billing" | "settings" | "profile"
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "")
 export function appUrl(path: string) {
-  return `${basePath}${path}`
+  return `${basePath}/#${path}`
 }
 function routeFromLocation() {
-  const path = window.location.pathname.replace(basePath, "") || "/"
-  return path.endsWith("/") && path !== "/" ? path.slice(0, -1) : path
+  const route = window.location.hash.slice(1)
+  return route || "/"
 }
 const nav: { id: Page; icon: string; label: string }[] = [
   { id: "dashboard", icon: "⌂", label: "داشبورد" },
@@ -464,6 +464,7 @@ function AppWorkspace({ initialPage = "dashboard", onRoute }: { initialPage?: Pa
     try {
       await api.logout()
     } finally {
+      clearAccessToken()
       setSession(null)
       setInApp(false)
     }
@@ -476,6 +477,7 @@ function AppWorkspace({ initialPage = "dashboard", onRoute }: { initialPage?: Pa
         {authOpen && (
           <AuthFlow
             onSuccess={(result) => {
+              saveAccessToken(result.accessToken)
               setSession({
                 phone: result.user.phone ?? "",
                 firstName: result.user.firstName ?? "",
@@ -562,7 +564,7 @@ export default function App() {
   if (route.startsWith("/admin")) return <AdminGate onLogout={goHome} />
   return (
     <>
-      <AppWorkspace initialPage={route === "/profile" ? "profile" : "dashboard"} onRoute={(page) => window.history.replaceState(null, "", appUrl(`/${page}`))} />
+      <AppWorkspace initialPage={route === "/profile" ? "profile" : "dashboard"} onRoute={(page) => { window.location.hash = `/${page}` }} />
       {notice && (
         <div
           className="fixed bottom-5 left-5 z-50 rounded-xl px-4 py-3 text-white"
