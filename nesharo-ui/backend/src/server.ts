@@ -39,7 +39,15 @@ export function buildApp() {
   app.register(brandRoutes, { prefix: '/api/v1/brands' })
   app.register(dashboardRoutes, { prefix: '/api/v1/dashboard' })
   app.register(roadmapRoutes, { prefix: '/api/v1/roadmap' })
-  app.get('/api/v1/profile', { preHandler: requireAuth }, async (request, reply) => { const profile = await prisma.profile.findUnique({ where: { userId: request.user!.id }, include: { user: { select: { id: true, phone: true, email: true, firstName: true, lastName: true, role: true } } } }); if (!profile) return reply.code(404).send({ ok: false, error: { code: 'PROFILE_NOT_FOUND', message: 'پروفایل پیدا نشد.' } }); return { ok: true, data: profile } })
+  app.get('/api/v1/profile', { preHandler: requireAuth }, async (request) => {
+    const profile = await prisma.profile.upsert({
+      where: { userId: request.user!.id },
+      update: {},
+      create: { userId: request.user!.id },
+      include: { user: { select: { id: true, phone: true, email: true, firstName: true, lastName: true, role: true } } },
+    })
+    return { ok: true, data: profile }
+  })
   app.patch('/api/v1/profile', { preHandler: requireAuth }, async (request) => {
     const input = profileSchema.parse(request.body)
     const existing = await prisma.profile.findUnique({ where: { userId: request.user!.id } })

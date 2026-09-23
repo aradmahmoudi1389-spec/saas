@@ -36,7 +36,13 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
       ...init.headers,
     },
   })
-  const payload = (await response.json()) as ApiResponse<T>
+  const text = await response.text()
+  let payload: ApiResponse<T>
+  try {
+    payload = JSON.parse(text) as ApiResponse<T>
+  } catch {
+    throw new Error("پاسخ API معتبر نیست. Deploy بک‌اند یا آدرس API را بررسی کنید.")
+  }
   if (!response.ok || !payload.ok) {
     throw new Error(payload.ok ? "درخواست ناموفق بود." : payload.error.message)
   }
