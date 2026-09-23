@@ -14,12 +14,26 @@ export type ApiBrand = {
 }
 
 const baseUrl = import.meta.env.VITE_API_URL ?? "https://saas-bg0w.onrender.com/api/v1"
+const accessTokenKey = "nesharo.access-token"
+
+export function saveAccessToken(token: string) {
+  sessionStorage.setItem(accessTokenKey, token)
+}
+
+export function clearAccessToken() {
+  sessionStorage.removeItem(accessTokenKey)
+}
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const accessToken = sessionStorage.getItem(accessTokenKey)
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...init.headers },
+    headers: {
+      "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      ...init.headers,
+    },
   })
   const payload = (await response.json()) as ApiResponse<T>
   if (!response.ok || !payload.ok) {
