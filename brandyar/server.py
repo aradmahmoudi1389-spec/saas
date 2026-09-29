@@ -39,6 +39,32 @@ def connect():
         CREATE TABLE IF NOT EXISTS tickets (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), subject TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'باز', created INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY, staff_id INTEGER REFERENCES staff(id), action TEXT NOT NULL, result TEXT NOT NULL, at INTEGER NOT NULL);
         CREATE INDEX IF NOT EXISTS attempts_lookup ON attempts(source,account,at);
+        CREATE TABLE IF NOT EXISTS accounts (
+            id INTEGER PRIMARY KEY,
+            phone TEXT NOT NULL UNIQUE,
+            username TEXT NOT NULL UNIQUE,
+            email TEXT NOT NULL,
+            name TEXT NOT NULL,
+            salt BLOB NOT NULL,
+            password_hash BLOB NOT NULL,
+            status TEXT NOT NULL DEFAULT 'فعال',
+            created INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS phone_codes (
+            phone TEXT PRIMARY KEY,
+            code_hash TEXT NOT NULL,
+            purpose TEXT NOT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            expires INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS user_sessions (
+            token_hash TEXT PRIMARY KEY,
+            account_id INTEGER NOT NULL REFERENCES accounts(id),
+            created INTEGER NOT NULL,
+            last_seen INTEGER NOT NULL,
+            expires INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS user_sessions_account ON user_sessions(account_id);
     ''')
     return db
 
