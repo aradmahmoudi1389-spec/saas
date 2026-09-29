@@ -96,9 +96,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store')
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Referrer-Policy', 'no-referrer')
-        policy = "default-src 'none'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+        policy = "default-src 'none'; style-src 'self'; font-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
         if self.path in ('/', '/index.html'):
-            policy = "default-src 'none'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+            policy = "default-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
         self.send_header('Content-Security-Policy', policy)
         for key, value in (headers or {}).items():
             self.send_header(key, value)
@@ -148,6 +148,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlsplit(self.path).path
         public = {'/', '/index.html', '/styles.css', '/typography.css', '/app.js'}
+        is_font = path.startswith('/fonts/') and path.endswith('.woff2') and '..' not in path
         with connect() as db:
             staff = self.session(db) if path.startswith('/api/admin/') or path in ('/admin', '/admin-panel.js', '/admin-panel.css', '/admin-client.js') else None
             if path.startswith('/api/admin/'):
@@ -169,13 +170,13 @@ class Handler(BaseHTTPRequestHandler):
                     data['summary'] = {'total': db.execute('SELECT count(*) FROM users').fetchone()[0], 'openTickets': db.execute("SELECT count(*) FROM tickets WHERE status='باز'").fetchone()[0] if 'tickets' in permitted else '—'}
                     return self.json(200, data)
                 return self.json(404, {'error': 'Not found'})
-            if path in public:
+            if path in public or is_font:
                 file = ROOT / ('index.html' if path in ('/', '/index.html') else path[1:])
             elif staff and path in ('/admin', '/admin-panel.js', '/admin-panel.css', '/admin-client.js'):
                 file = ROOT / ('admin.html' if path == '/admin' else path[1:])
             else:
                 return self.json(404, {'error': 'Not found'})
-            types = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8'}
+            types = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.woff2': 'font/woff2'}
             self.respond(200, file.read_bytes(), types[file.suffix])
 
     def do_POST(self):
