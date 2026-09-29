@@ -243,6 +243,20 @@ body em, body i,
   font-style: normal;
 }
 
+/* هیچ وزنی خارج از 400–700 درخواست نمی‌شود؛ در غیر این صورت مرورگر وزن را
+   مصنوعی ضخیم می‌کند و اتصال حروف فارسی خراب می‌شود. */
+.logo,
+.display,
+.score-ring > span,
+.step-num,
+.price,
+.metric-value,
+.metric-card strong,
+.price-custom {
+  font-weight: var(--fw-bold);
+  font-synthesis-weight: none;
+}
+
 /* ── ۳) تیترها ─────────────────────────────────────────────────────────── */
 h1, .display {
   font-size: var(--fs-display);
