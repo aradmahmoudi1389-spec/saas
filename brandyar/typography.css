@@ -1,0 +1,627 @@
+/* ==========================================================================
+   برندیار — سیستم تیپوگرافی
+   این فایل فقط لایه فونت، اندازه، وزن، فاصله سطر و خوانایی را استاندارد
+   می‌کند. چیدمان، رنگ‌بندی، ساختار HTML و منطق جاوااسکریپت تغییر نمی‌کند.
+   بعد از styles.css بارگذاری شود تا قواعد پایه و متغیرها در دسترس باشند.
+   ========================================================================== */
+
+/* ── ۰) تعریف فونت‌ها ───────────────────────────────────────────────────── */
+/* وزیرمتن: فقط چهار وزن 400 تا 700، فرمت woff2 و font-display: swap */
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/fonts/webfonts/Vazirmatn-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/fonts/webfonts/Vazirmatn-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/fonts/webfonts/Vazirmatn-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/fonts/webfonts/Vazirmatn-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ── ۱) متغیرهای تیپوگرافی ─────────────────────────────────────────────── */
+:root {
+  --font-main: "Vazirmatn", "IRANSansX", "Tahoma", sans-serif;
+  --font-number: "Estedad", "Vazirmatn", sans-serif;
+  --font-code: "JetBrains Mono", "Courier New", monospace;
+  --font-latin: "Poppins", "Manrope", sans-serif;
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  --fs-display: 44px;
+  --fs-h1: 32px;
+  --fs-h2: 26px;
+  --fs-h3: 21px;
+  --fs-h4: 18px;
+  --fs-body-lg: 17px;
+  --fs-body: 16px;
+  --fs-small: 14px;
+  --fs-caption: 13px;
+
+  --lh-tight: 1.4;
+  --lh-heading: 1.5;
+  --lh-body: 1.9;
+  --lh-loose: 2.05;
+
+  /* رنگ متن کم‌کنتراست با کنتراست کافی روی پس‌زمینه روشن */
+  --tp-muted: #586b64;
+  --tp-border: #e4ebe4;
+}
+
+/* ── ۲) قواعد پایه ─────────────────────────────────────────────────────── */
+body {
+  font-family: var(--font-main);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-body);
+  direction: rtl;
+  text-align: right;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* letter-spacing فارسی همیشه صفر؛ هیچ فاصله حرفی منفی روی متن فارسی */
+body,
+h1, h2, h3, h4, h5, h6,
+p, li, summary, label, blockquote,
+.display, .section-title, .lead, .btn, .tag, .pill, .chip,
+.site-nav a, .app-sidebar a, .app-bottom a, .text-link {
+  letter-spacing: 0;
+}
+
+/* متن لاتین فقط در برچسب‌های کوچک اجازه فاصله حرفی دارد */
+.demo-badge,
+.app-sidebar-label,
+.price small,
+.dashboard-note-latin {
+  text-transform: none;
+}
+
+/* متن فارسی هرگز مورب نمی‌شود */
+body em, body i,
+.display em, .section-title em,
+.mini-bars i, .bar-item .track i, .progress-track i {
+  font-style: normal;
+}
+
+/* ── ۳) تیترها ─────────────────────────────────────────────────────────── */
+h1, .display {
+  font-size: var(--fs-display);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
+  margin-bottom: 16px;
+}
+
+h1:not(.display) {
+  font-size: var(--fs-h1);
+}
+
+h2 {
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-heading);
+  margin-bottom: 14px;
+}
+
+h3 {
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-heading);
+  margin-bottom: 12px;
+}
+
+h4 {
+  font-size: var(--fs-h4);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-heading);
+}
+
+/* تیتر بخش‌ها: Bold، بدون گرادیان و بدون سایه سنگین */
+.section-title {
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-heading);
+  background: none;
+  text-shadow: none;
+}
+
+.page-hero h1 {
+  font-size: var(--fs-display);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
+}
+
+/* تیترهای داخل پنل که قبلاً اندازه دستی داشتند */
+.app-heading h1,
+.auth-card h1,
+.cta-block h2,
+.app-banner h2,
+.panel h2,
+.legal-copy h2,
+.about-grid h2,
+.not-found h1,
+.app-section-title {
+  line-height: var(--lh-heading);
+  text-shadow: none;
+}
+
+.app-heading h1,
+.auth-card h1,
+.not-found h1 {
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-bold);
+}
+
+.cta-block h2 {
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-bold);
+}
+
+.app-banner h2,
+.panel h2,
+.legal-copy h2,
+.app-section-title {
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-semibold);
+}
+
+.about-grid h2,
+.studio-layout h3,
+.idea-detail h3,
+.feature-card h3,
+.step-card h3,
+.price-card h3,
+.empty-state h3 {
+  font-size: var(--fs-h4);
+  font-weight: var(--fw-semibold);
+}
+
+.insight-sheet > strong,
+.analysis-head strong {
+  font-size: var(--fs-small);
+  font-weight: var(--fw-semibold);
+}
+
+/* ── ۴) متن، پاراگراف و توضیحات ────────────────────────────────────────── */
+p, li, blockquote, .draft-text {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+
+.lead,
+.hero-copy .lead {
+  font-size: var(--fs-body-lg);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-body);
+}
+
+.page-hero p {
+  font-size: var(--fs-body-lg);
+  line-height: var(--lh-body);
+}
+
+/* رنگ متن‌های کم‌کنتراست تا نسبت 4.5:1 روی همه پس‌زمینه‌های روشن بالا می‌رود */
+.section-subtitle,
+.feature-card p,
+.step-card p,
+.price-card p,
+.preview-tip,
+.faq-list p,
+.legal-copy p,
+.empty-state p,
+.idea-detail p,
+.hint,
+.notice,
+.form-feedback,
+.results-count,
+.road-step small,
+.metric-card .label,
+.insight-row,
+.bar-item span,
+.check-list li {
+  color: var(--tp-muted);
+}
+
+.footer-bottom,
+.footer-main p,
+.footer-main a:not(.logo),
+.hero-note,
+.mini-bars div,
+.preview-top,
+.app-sidebar-label,
+.trust-inner {
+  color: #5c6b66;
+}
+
+/* متن ثانویه و توضیحات کارت‌ها */
+.section-subtitle,
+.feature-card p,
+.step-card p,
+.price-card p,
+.preview-tip,
+.faq-list p,
+.legal-copy p,
+.empty-state p,
+.idea-detail p,
+.calendar-entry small,
+.metric-card .label,
+.hint,
+.notice,
+.form-feedback,
+.results-count,
+.road-step small,
+.library-card small,
+.action-item small,
+.idea-item small,
+.library-item small,
+.work-item small,
+.metric-card small {
+  font-size: var(--fs-small);
+  line-height: var(--lh-body);
+}
+
+/* کپشن، برچسب و زیرنویس */
+.eyebrow,
+.tag,
+.pill,
+.chip,
+.card-meta,
+.app-sidebar-label,
+.demo-badge,
+.hero-note,
+.float-note,
+.footer-bottom,
+.price small,
+.floating-caption,
+.calendar-day h2 span,
+.calendar-entry button,
+.day-add,
+.mini-bars div,
+.bar-item,
+.mini-score-grid,
+.filter-row label,
+.field small,
+.skip {
+  font-size: var(--fs-caption);
+  line-height: var(--lh-heading);
+}
+
+.eyebrow,
+.tag,
+.pill,
+.app-sidebar-label,
+.demo-badge,
+.card-meta,
+.hero-note {
+  font-weight: var(--fw-medium);
+}
+
+/* نقل‌قول و شهادت مشتری */
+blockquote {
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-loose);
+}
+
+/* ── ۵) دکمه، لینک و فرم ───────────────────────────────────────────────── */
+.btn,
+button,
+.tabs button,
+.chip,
+.save-idea,
+.day-add,
+.library-card button,
+.dashboard-link,
+.inline-link {
+  font-family: var(--font-main);
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-body);
+  letter-spacing: 0;
+  text-decoration: none;
+  font-style: normal;
+}
+
+.btn,
+.btn-sm,
+.tabs button,
+.chip {
+  line-height: var(--lh-heading);
+}
+
+.btn-sm,
+.save-idea,
+.day-add,
+.library-card button,
+.dashboard-link,
+.inline-link,
+.tag,
+.pill {
+  font-size: var(--fs-small);
+}
+
+/* لینک‌های اصلی بدون خط زیر، با وزن مشخص و کنتراست کافی */
+a:not(.btn),
+.site-nav a,
+.footer-main a,
+.auth-bottom a,
+.inline-link,
+.dashboard-link {
+  font-weight: var(--fw-medium);
+  color: #1d6b58;
+}
+
+.site-nav a,
+.header-actions .text-link {
+  font-size: var(--fs-small);
+  font-weight: var(--fw-medium);
+}
+
+/* برچسب فیلد فرم */
+.field label,
+.filter-row label,
+.check-control {
+  font-weight: var(--fw-medium);
+  font-size: var(--fs-small);
+}
+
+.field input,
+.field select,
+.field textarea,
+.filter-row select,
+.filter-row input,
+.work-item select,
+.library-card select,
+.calendar-entry select {
+  font-family: var(--font-main);
+  font-size: var(--fs-small);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-heading);
+}
+
+/* متن راهنما و خطای فرم */
+.field small,
+.hint {
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-regular);
+}
+
+.form-feedback,
+.error,
+.danger-link {
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-medium);
+}
+
+.error,
+.danger-link,
+.library-card .danger-link,
+.calendar-entry button {
+  color: #a64237;
+}
+
+/* منو و آیتم‌های ناوبری */
+.site-nav a,
+.app-sidebar nav a,
+.sidebar-bottom a,
+.app-bottom a,
+.app-sidebar-label,
+.text-link,
+.tabs button,
+.demo-switch button {
+  font-weight: var(--fw-medium);
+  font-size: var(--fs-small);
+}
+
+.app-bottom a {
+  font-size: var(--fs-caption);
+}
+
+/* ── ۶) جدول و لیست داده در پنل ────────────────────────────────────────── */
+table {
+  font-size: var(--fs-small);
+  border-collapse: collapse;
+}
+
+th {
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-small);
+}
+
+td {
+  font-weight: var(--fw-regular);
+  font-size: var(--fs-small);
+}
+
+.action-item,
+.idea-item,
+.library-item,
+.library-card,
+.work-item,
+.insight-row,
+.mini-score-grid > div,
+.metric-card .label {
+  font-size: var(--fs-small);
+  line-height: var(--lh-heading);
+}
+
+.action-item strong,
+.idea-item strong,
+.library-item strong,
+.library-card strong,
+.work-item strong,
+.bar-item span,
+.filter-row label {
+  font-weight: var(--fw-semibold);
+}
+
+.action-item small,
+.idea-item small,
+.library-item small,
+.library-card small,
+.work-item small,
+.road-step small,
+.bar-item,
+.mini-bars div {
+  font-weight: var(--fw-regular);
+}
+
+/* ── ۷) اعداد، امتیاز و آمار ───────────────────────────────────────────── */
+.metric-value,
+.metric-card strong,
+.metric-text,
+.score,
+.score-ring > span,
+.stat-number,
+.price,
+.percentage,
+.chart-label,
+.step-num,
+.preview-top strong,
+.mini-score-grid strong,
+.analysis-head strong,
+.tag,
+.pill,
+.results-count,
+.progress-track,
+.bar-item .track,
+.road-step strong,
+.preview-score,
+.price-custom {
+  font-family: var(--font-number);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* اعداد آماری و داشبورد با ارقام لاتین */
+.metric-card strong,
+.metric-text,
+.score-ring > span,
+.step-num,
+.price,
+.price-custom,
+.percentage,
+.chart-label,
+.mini-score-grid strong,
+.stat-number {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* متن فارسی و محتوای کاربر با ارقام فارسی */
+.section-subtitle,
+.feature-card p,
+.step-card p,
+.price-card p,
+.faq-list p,
+.legal-copy p,
+.notice,
+.hint,
+.lead,
+p,
+li,
+blockquote,
+summary {
+  font-variant-numeric: normal;
+}
+
+/* واحدها و درصدها داخل همان عنصر عددی */
+.price small {
+  font-family: var(--font-number);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── ۸) کد و داده فنی ──────────────────────────────────────────────────── */
+code,
+pre,
+kbd,
+samp,
+.api-key,
+.token,
+.code-block,
+.log-line {
+  font-family: var(--font-code);
+  direction: ltr;
+  text-align: left;
+  font-size: var(--fs-small);
+  line-height: 1.7;
+  letter-spacing: 0;
+}
+
+/* کلید و توکن: انتخاب و کپی راحت */
+.api-key,
+.token,
+code {
+  user-select: all;
+  -webkit-user-select: all;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+
+/* ── ۹) لوگو و برند ────────────────────────────────────────────────────── */
+.logo {
+  font-family: var(--font-main);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0;
+}
+
+.logo-latin,
+.brand-latin {
+  font-family: var(--font-latin);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* ── ۱۰) واکنش‌گرایی اندازه فونت ─────────────────────────────────────────── */
+@media (max-width: 768px) {
+  :root {
+    --fs-display: 32px;
+    --fs-h1: 26px;
+    --fs-h2: 22px;
+    --fs-h3: 19px;
+    --fs-body: 15px;
+    --fs-body-lg: 16px;
+    --fs-small: 13.5px;
+  }
+
+  h1, .display,
+  .page-hero h1,
+  .section-title {
+    line-height: var(--lh-tight);
+  }
+
+  p, li, blockquote, .lead, .draft-text {
+    line-height: 1.8;
+  }
+
+  /* هیچ متنی کوچک‌تر از ۱۳ پیکسل نشود */
+  .footer-bottom,
+  .hero-note,
+  .mini-bars div,
+  .calendar-entry button,
+  .demo-badge {
+    font-size: 13px;
+  }
+}
