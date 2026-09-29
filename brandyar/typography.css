@@ -243,20 +243,6 @@ body em, body i,
   font-style: normal;
 }
 
-/* هیچ وزنی خارج از 400–700 درخواست نمی‌شود؛ در غیر این صورت مرورگر وزن را
-   مصنوعی ضخیم می‌کند و اتصال حروف فارسی خراب می‌شود. */
-.logo,
-.display,
-.score-ring > span,
-.step-num,
-.price,
-.metric-value,
-.metric-card strong,
-.price-custom {
-  font-weight: var(--fw-bold);
-  font-synthesis-weight: none;
-}
-
 /* ── ۳) تیترها ─────────────────────────────────────────────────────────── */
 h1, .display {
   font-size: var(--fs-display);
@@ -775,72 +761,5 @@ code {
   .calendar-entry button,
   .demo-badge {
     font-size: 13px;
-  }
-}
-
-/* ── ۱۱) تیترهای اصلی: کمی درشت‌تر و محکم‌تر ────────────────────────────────
-   تیترهای شاخص (هیرو، تیتر بخش‌ها و تیتر صفحه‌ها) کمی بزرگ‌تر و با وزن کامل
-   Bold نمایش داده می‌شوند تا در نگاه اول واضح‌تر و بولدتر دیده شوند. */
-
-h1,
-.display,
-.page-hero h1,
-.section-title,
-.cta-block h2,
-.app-banner h2,
-.panel h2,
-.app-section-title,
-.app-heading h1,
-.auth-card h1,
-.not-found h1 {
-  font-weight: var(--fw-bold);
-  font-synthesis-weight: none;
-}
-
-.display,
-.page-hero h1 {
-  font-size: clamp(40px, 4.6vw, 70px);
-}
-
-.section-title,
-.cta-block h2 {
-  font-size: clamp(30px, 3.3vw, 46px);
-}
-
-h1:not(.display),
-.app-heading h1,
-.auth-card h1,
-.not-found h1 {
-  font-size: clamp(28px, 3.2vw, 38px);
-}
-
-.app-banner h2,
-.panel h2,
-.app-section-title {
-  font-size: clamp(19px, 1.7vw, 23px);
-}
-
-@media (max-width: 768px) {
-  .display,
-  .page-hero h1 {
-    font-size: clamp(34px, 8.6vw, 44px);
-  }
-
-  .section-title,
-  .cta-block h2 {
-    font-size: clamp(26px, 7vw, 34px);
-  }
-
-  h1:not(.display),
-  .app-heading h1,
-  .auth-card h1,
-  .not-found h1 {
-    font-size: clamp(23px, 6.2vw, 29px);
-  }
-
-  .app-banner h2,
-  .panel h2,
-  .app-section-title {
-    font-size: 19px;
   }
 }
