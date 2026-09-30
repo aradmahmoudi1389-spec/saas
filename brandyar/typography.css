@@ -216,7 +216,9 @@ body {
   text-align: right;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
+  text-rendering: auto;
+  font-synthesis: none;
+  font-kerning: none;
 }
 
 /* letter-spacing فارسی همیشه صفر؛ هیچ فاصله حرفی منفی روی متن فارسی */
@@ -762,4 +764,114 @@ code {
   .demo-badge {
     font-size: 13px;
   }
+}
+
+/* سرفصل‌ها با وزن واقعی فونت، بدون ضخیم‌سازی مصنوعی */
+.display, .page-hero h1, .section-title, .cta-block h2,
+.app-heading h1, .app-banner h2, .panel h2, .auth-card h1 {
+  font-weight: 700;
+  font-synthesis: none;
+}
+.display { font-size: clamp(44px, 5vw, 72px); line-height: 1.4; }
+.section-title, .cta-block h2 { font-size: clamp(27px, 2.6vw, 36px); }
+
+.theme-toggle {
+  display: inline-grid; place-items: center; flex: none;
+  width: 40px; height: 40px; padding: 0;
+  border: 1px solid #c9d9d0; border-radius: 12px;
+  background: #fff; color: #193e3d; cursor: pointer;
+}
+.theme-toggle:hover { background: #eaf3ed; }
+.theme-toggle svg { width: 20px; height: 20px; }
+
+html[data-theme="dark"] { color-scheme: dark; }
+[data-theme="dark"] body { background: #111c1b; color: #eaf2ed; }
+[data-theme="dark"] .site-header { background: #172421ed; border-bottom-color: #334843; }
+[data-theme="dark"] .site-nav,
+[data-theme="dark"] .app-sidebar,
+[data-theme="dark"] .app-bottom,
+[data-theme="dark"] .trust-bar,
+[data-theme="dark"] .footer { background: #172421; border-color: #334843; }
+[data-theme="dark"] .site-nav a,
+[data-theme="dark"] .logo,
+[data-theme="dark"] .header-actions .text-link,
+[data-theme="dark"] .app-sidebar a,
+[data-theme="dark"] .app-bottom a { color: #d5e5dc; }
+[data-theme="dark"] .hero {
+  background: radial-gradient(circle at 8% 13%, #1b3b32 0, transparent 32%), #111c1b;
+}
+[data-theme="dark"] .page-hero { background: radial-gradient(circle at 50% 0, #234036, transparent 60%); }
+[data-theme="dark"] .section,
+[data-theme="dark"] .section.light,
+[data-theme="dark"] .form-page { background: #111c1b; }
+[data-theme="dark"] .section.soft { background: #192824; }
+[data-theme="dark"] .feature-card,
+[data-theme="dark"] .white-card,
+[data-theme="dark"] .price-card:not(.featured),
+[data-theme="dark"] .preview-card,
+[data-theme="dark"] .insight-sheet,
+[data-theme="dark"] .metric-card,
+[data-theme="dark"] .panel,
+[data-theme="dark"] .auth-card,
+[data-theme="dark"] .faq-list details,
+[data-theme="dark"] .calendar-day,
+[data-theme="dark"] .cta-block {
+  background: #1d2e2a; border-color: #385148; color: #eaf2ed;
+}
+[data-theme="dark"] h1,
+[data-theme="dark"] h2,
+[data-theme="dark"] h3,
+[data-theme="dark"] h4,
+[data-theme="dark"] .display,
+[data-theme="dark"] .section-title,
+[data-theme="dark"] .preview-heading,
+[data-theme="dark"] .preview-top strong,
+[data-theme="dark"] .insight-sheet strong,
+[data-theme="dark"] .metric-card strong,
+[data-theme="dark"] .faq-list summary { color: #f2f7f3; }
+[data-theme="dark"] p,
+[data-theme="dark"] li,
+[data-theme="dark"] .lead,
+[data-theme="dark"] .section-subtitle,
+[data-theme="dark"] .hero-note,
+[data-theme="dark"] .feature-card p,
+[data-theme="dark"] .price-card p,
+[data-theme="dark"] .preview-tip,
+[data-theme="dark"] .panel > p,
+[data-theme="dark"] .page-hero p,
+[data-theme="dark"] .footer-main p { color: #b9cfc4; }
+[data-theme="dark"] a:not(.btn) { color: #91d4bc; }
+[data-theme="dark"] .btn-outline,
+[data-theme="dark"] .theme-toggle { background: #20332d; border-color: #527264; color: #eaf2ed; }
+[data-theme="dark"] .btn-dark { background: #79cbb0; color: #10211b; }
+[data-theme="dark"] .score-ring > span { background: #1d2e2a; }
+[data-theme="dark"] .preview-tip,
+[data-theme="dark"] .notice,
+[data-theme="dark"] .tag,
+[data-theme="dark"] .pill { background: #264037; color: #d3ece0; }
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea { background: #14221f; border-color: #527264; color: #eaf2ed; }
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder { color: #a8beb2; }
+[data-theme="dark"] .app-banner,
+[data-theme="dark"] .price-card.featured { background: #28483c; }
+[data-theme="dark"] .insight-row,
+[data-theme="dark"] .action-item,
+[data-theme="dark"] .library-item { border-color: #385148; }
+
+@media (max-width: 800px) {
+  .header-actions { gap: 10px; }
+  .header-actions .text-link { display: inline-flex; }
+  .site-nav.open { background: #fff; }
+  [data-theme="dark"] .site-nav.open { background: #172421; }
+}
+@media (max-width: 600px) {
+  .display { font-size: clamp(35px, 9vw, 48px); }
+  .section-title, .cta-block h2 { font-size: clamp(25px, 7vw, 32px); }
+  .header-inner { gap: 8px; }
+  .header-actions .text-link { font-size: 13px; }
+  .theme-toggle { width: 36px; height: 36px; }
+  .hero-copy, .hero-grid, .preview-wrap { min-width: 0; }
+  .hero-cta .btn { max-width: 100%; }
 }
