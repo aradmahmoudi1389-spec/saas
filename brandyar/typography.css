@@ -1219,7 +1219,7 @@ html { -webkit-text-size-adjust: 100%; }
 .site-footer .footer-brand, .site-footer .footer-group { min-width: 0; }
 .site-footer .footer-brand .logo { color: var(--footer-ink); }
 .site-footer .footer-brand p { color: var(--footer-muted); max-width: 30ch; margin-block: 16px 12px; }
-.site-footer .footer-group { display: block; }
+.site-footer .footer-main > .footer-group { display: block; }
 .site-footer .footer-group strong { display: block; color: var(--footer-ink); font-size: 14px; margin-bottom: 12px; }
 .site-footer .footer-group nav { display: grid; justify-items: start; gap: 2px; }
 .site-footer .footer-main a:not(.logo) {
