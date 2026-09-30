@@ -1007,7 +1007,8 @@ body.has-scrolled .site-header { box-shadow: 0 8px 24px rgba(20, 57, 48, .08); }
 .hero-visual__float { animation: premiumFloat 8s ease-in-out infinite; }
 .hero .hero-visual .preview-wrap { animation: none; }
 .hero .hero-visual .preview-wrap::before { display: none; }
-.hero .hero-visual .preview-card { transform: none; transition: transform 260ms cubic-bezier(.22,1,.36,1), box-shadow 300ms ease; }
+.hero .hero-visual .preview-card { transform: none; transition: box-shadow 300ms ease; }
+.hero-visual__card-group { position: relative; transition: transform 260ms cubic-bezier(.22,1,.36,1); }
 .hero .hero-visual .preview-wrap { perspective: 1100px; }
 .hero-visual__surface { position: relative; overflow: visible; border-radius: inherit; }
 .hero-visual__glow {
@@ -1050,8 +1051,10 @@ body.has-scrolled .site-header { box-shadow: 0 8px 24px rgba(20, 57, 48, .08); }
 }
 @media (hover:hover) and (pointer:fine) {
   .hero-visual:hover .hero-visual__float { animation-play-state: paused; }
-  .hero .hero-visual:hover .preview-card {
+  .hero .hero-visual:hover .hero-visual__card-group {
     transform: rotateX(var(--card-rotate-x, 0deg)) rotateY(var(--card-rotate-y, 0deg)) scale(1.025);
+  }
+  .hero .hero-visual:hover .preview-card {
     box-shadow: var(--card-shadow-x, 0px) var(--card-shadow-y, 28px) 65px rgba(16,64,55,.26);
   }
   .hero-visual:hover .hero-visual__surface::after { opacity: .8; }
