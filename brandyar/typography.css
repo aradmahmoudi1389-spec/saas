@@ -1018,6 +1018,9 @@ body.has-scrolled .site-header { box-shadow: 0 8px 24px rgba(20, 57, 48, .08); }
   will-change: transform;
 }
 .hero-visual__tilt { transform-style: preserve-3d; }
+.hero .hero-visual .preview-wrap { animation: none; }
+.hero .hero-visual .preview-wrap::before { display: none; }
+.hero .hero-visual .preview-card { backface-visibility: hidden; }
 .hero-visual__surface { position: relative; overflow: visible; border-radius: inherit; }
 .hero-visual__glow {
   position: absolute;
