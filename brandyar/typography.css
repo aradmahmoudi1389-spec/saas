@@ -1053,7 +1053,7 @@ body.has-scrolled .site-header { box-shadow: 0 8px 24px rgba(20, 57, 48, .08); }
 @media (min-width: 801px) and (hover:hover) and (pointer:fine) {
   .hero-visual:hover .hero-visual__float { animation-play-state: paused; }
   .hero-visual:hover .hero-visual__tilt {
-    transform: rotateX(var(--card-rotate-x, 0deg)) rotateY(var(--card-rotate-y, 0deg)) scale(1.025);
+    transform: translate3d(var(--card-shift-x, 0px), var(--card-shift-y, 0px), 8px) rotateX(var(--card-rotate-x, 0deg)) rotateY(var(--card-rotate-y, 0deg)) scale(1.045);
   }
   .hero .hero-visual:hover .preview-card {
     box-shadow: var(--card-shadow-x, 0px) var(--card-shadow-y, 28px) 65px rgba(16,64,55,.26);
