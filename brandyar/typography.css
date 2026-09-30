@@ -956,3 +956,45 @@ body.has-scrolled .site-header { box-shadow: 0 8px 24px rgba(20, 57, 48, .08); }
   .hero .preview-wrap.motion-item.is-visible, .feature-card:hover, .step-card:hover,
   .price-card:hover, .panel:hover, .site-header { transition: none; transform: none; }
 }
+
+[data-theme="dark"] .float-note {
+  background: #243b35;
+  color: #eaf5ef;
+  border-color: #5e8c7b;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .34);
+}
+[data-theme="dark"] .float-note svg { color: #91e0c2; }
+[data-theme="dark"] .btn-dark:hover {
+  background: #96dfc4;
+  color: #10231d;
+  box-shadow: 0 12px 26px rgba(121, 203, 176, .28);
+}
+[data-theme="dark"] .btn-outline:hover {
+  background: #2b4b42;
+  border-color: #83d5b9;
+  color: #f2fff8;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, .2);
+}
+[data-theme="dark"] .site-nav a:hover,
+[data-theme="dark"] .site-nav a.active,
+[data-theme="dark"] .footer-main a:hover,
+[data-theme="dark"] .inline-link:hover,
+[data-theme="dark"] .dashboard-link:hover { color: #b4f0d5; }
+[data-theme="dark"] .feature-card:hover,
+[data-theme="dark"] .step-card:hover,
+[data-theme="dark"] .price-card:hover,
+[data-theme="dark"] .panel:hover {
+  border-color: #5b907d;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, .28);
+}
+[data-theme="dark"] .chip:hover,
+[data-theme="dark"] .chip.chosen {
+  background: #2b4b42;
+  border-color: #83d5b9;
+  color: #effff7;
+}
+[data-theme="dark"] .theme-toggle:hover {
+  background: #2b4b42;
+  border-color: #83d5b9;
+  color: #f2fff8;
+}
