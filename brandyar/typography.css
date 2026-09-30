@@ -933,3 +933,26 @@ html[data-theme="dark"] { color-scheme: dark; }
   .hero .preview-wrap, .hero .preview-wrap::before { animation: none; transition: none; }
   .hero .hero-cta .btn, .hero .hero-cta .btn-dark svg { transition: none; }
 }
+
+/* موشن سبک و مرحله‌ای برای ورود محتوا و اسکرول */
+.motion-item {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 560ms ease, transform 560ms cubic-bezier(.22,.61,.36,1);
+  transition-delay: var(--motion-delay, 0ms);
+}
+.motion-item.is-visible { opacity: 1; transform: none; }
+.motion-hero { transform: translateY(12px); }
+.hero .preview-wrap.motion-item { transform: translate3d(0, 18px, 0) scale(.985); }
+.hero .preview-wrap.motion-item.is-visible { transform: translate3d(0, 0, 0) scale(1); }
+.feature-card:hover, .step-card:hover, .price-card:hover, .panel:hover {
+  transform: translateY(-3px);
+  transition: transform 220ms ease, box-shadow 220ms ease;
+}
+.site-header { transition: box-shadow 220ms ease, background-color 220ms ease; }
+body.has-scrolled .site-header { box-shadow: 0 8px 24px rgba(20, 57, 48, .08); }
+@media (prefers-reduced-motion: reduce) {
+  .motion-item, .motion-item.is-visible, .hero .preview-wrap.motion-item,
+  .hero .preview-wrap.motion-item.is-visible, .feature-card:hover, .step-card:hover,
+  .price-card:hover, .panel:hover, .site-header { transition: none; transform: none; }
+}
