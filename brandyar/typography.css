@@ -1072,3 +1072,13 @@ body.has-scrolled .site-header { box-shadow: 0 8px 24px rgba(20, 57, 48, .08); }
   }
   .hero-visual { opacity: 1; }
 }
+
+.hero-visual,
+.hero-visual.hero-ready {
+  transform: none;
+}
+.hero-visual__float { animation: none; }
+.hero .hero-visual .preview-card { transform: none; }
+@media (hover:hover) and (pointer:fine) {
+  .hero-visual:hover { filter: none; }
+}
