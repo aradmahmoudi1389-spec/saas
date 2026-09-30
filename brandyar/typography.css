@@ -875,3 +875,61 @@ html[data-theme="dark"] { color-scheme: dark; }
   .hero-copy, .hero-grid, .preview-wrap { min-width: 0; }
   .hero-cta .btn { max-width: 100%; }
 }
+
+.hero .hero-copy { min-width: 0; }
+.hero .display {
+  max-width: 680px;
+  font-size: clamp(36px, 3.25vw, 48px);
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0;
+}
+.hero-title__line { display: block; white-space: nowrap; }
+.hero .display strong { color: #237466; font-weight: 700; }
+
+.hero .preview-wrap {
+  isolation: isolate;
+  animation: hero-visual-float 6.5s ease-in-out infinite;
+  transition: filter 240ms ease;
+}
+.hero .preview-wrap::before {
+  z-index: -1;
+  background: radial-gradient(circle, rgba(36,133,112,.16), rgba(36,133,112,.06) 38%, transparent 72%);
+  filter: blur(22px);
+  animation: hero-visual-glow 6.5s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+@keyframes hero-visual-float {
+  50% { transform: translateY(-8px); }
+}
+@keyframes hero-visual-glow {
+  from { transform: scale(.96); opacity: .45; }
+  to { transform: scale(1.04); opacity: .8; }
+}
+@media (hover: hover) and (pointer: fine) {
+  .hero .preview-wrap:hover { filter: drop-shadow(0 20px 30px rgba(17,59,52,.12)); }
+}
+.hero .hero-cta .btn {
+  transition: transform 200ms ease, background-color 200ms ease,
+    border-color 200ms ease, box-shadow 200ms ease;
+}
+.hero .hero-cta .btn-dark:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(17,59,52,.16);
+}
+.hero .hero-cta .btn-dark svg { transition: transform 200ms ease; }
+.hero .hero-cta .btn-dark:hover svg { transform: translateX(-3px); }
+.hero .hero-cta .btn-outline:hover {
+  border-color: rgba(36,133,112,.55);
+  background: rgba(36,133,112,.05);
+}
+@media (max-width: 800px) {
+  .hero-title__line { white-space: normal; }
+}
+@media (max-width: 600px) {
+  .hero .display { font-size: clamp(30px, 7.8vw, 40px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero .preview-wrap, .hero .preview-wrap::before { animation: none; transition: none; }
+  .hero .hero-cta .btn, .hero .hero-cta .btn-dark svg { transition: none; }
+}
