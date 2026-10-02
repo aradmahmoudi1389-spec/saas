@@ -147,7 +147,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlsplit(self.path).path
-        public = {'/', '/index.html', '/styles.css', '/typography.css', '/app.js'}
+        public = {'/', '/index.html', '/styles.css', '/typography.css', '/app.js', '/logo.jpg'}
         is_font = path.startswith('/fonts/') and path.endswith('.woff2') and '..' not in path
         with connect() as db:
             staff = self.session(db) if path.startswith('/api/admin/') or path in ('/admin', '/admin-panel.js', '/admin-panel.css', '/admin-client.js') else None
@@ -176,7 +176,7 @@ class Handler(BaseHTTPRequestHandler):
                 file = ROOT / ('admin.html' if path == '/admin' else path[1:])
             else:
                 return self.json(404, {'error': 'Not found'})
-            types = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.woff2': 'font/woff2'}
+            types = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.woff2': 'font/woff2', '.jpg': 'image/jpeg'}
             self.respond(200, file.read_bytes(), types[file.suffix])
 
     def do_POST(self):
