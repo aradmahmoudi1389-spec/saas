@@ -245,7 +245,7 @@ document.addEventListener('click',e=>{const tab=e.target.closest('[data-tab]');i
   let ideaLimit = 4;
   const make = (type, fields, source = 'user_input') => {
     const now = new Date().toISOString();
-    const record = {id: crypto.randomUUID(), createdAt: now, updatedAt: now, source, status:'draft', ...fields};
+    const record = {id: Array.from(crypto.getRandomValues(new Uint32Array(4)), n => n.toString(16).padStart(8,'0')).join(''), createdAt: now, updatedAt: now, source, status:'draft', ...fields};
     data[type].push(record); save(); return record;
   };
   const update = (record, fields) => {Object.assign(record, fields, {updatedAt: new Date().toISOString()}); save();};
