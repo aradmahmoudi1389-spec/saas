@@ -134,24 +134,99 @@ class StorageTests(unittest.TestCase):
         return db
 
     def test_cache_and_session_isolation(self):
-        with self.database() as db, patch.object(analysis, 'generate_report', return_value=sample_report()) as generate:
+        with self.database() as db, patch.object(analysis, 'generate_report', return_value=sample_report()) as generate, patch.object(analysis.time, 'time', return_value=10000) as clock:
             analysis.analyze(db, 'session-one', 'source', self.answers)
             analysis.analyze(db, 'session-one', 'source', self.answers)
             self.assertEqual(generate.call_count, 1)
+            self.assertEqual(db.execute('SELECT count(*) FROM assessment_attempts').fetchone()[0], 1)
+            clock.return_value += 10
             analysis.analyze(db, 'session-two', 'source', self.answers)
             self.assertEqual(generate.call_count, 2)
             self.assertNotIn('خصوصی', str(db.execute('SELECT report FROM assessment_jobs').fetchall()))
 
-    def test_retry_after_failure_and_limit(self):
-        with self.database() as db, patch.object(analysis, 'generate_report', side_effect=analysis.AnalysisError()):
-            for _ in range(3):
+    def test_failed_attempts_do_not_consume_quota(self):
+        with self.database() as db, patch.object(analysis, 'generate_report', side_effect=analysis.AnalysisError()) as generate, patch.object(analysis.time, 'time', return_value=10000) as clock:
+            for _ in range(5):
                 with self.assertRaises(analysis.AnalysisError) as caught:
                     analysis.analyze(db, 'session', 'source', self.answers)
                 self.assertEqual(caught.exception.status, 502)
+                clock.return_value += 10
+            self.assertEqual(db.execute('SELECT count(*) FROM assessment_jobs').fetchone()[0], 0)
+            self.assertEqual(db.execute("SELECT count(*) FROM assessment_attempts WHERE state='failed'").fetchone()[0], 5)
+            generate.side_effect = None
+            generate.return_value = sample_report()
+            self.assertEqual(analysis.analyze(db, 'session', 'source', self.answers), sample_report())
+
+    def test_short_cooldown_and_source_isolation(self):
+        with self.database() as db, patch.object(analysis, 'generate_report', side_effect=analysis.AnalysisError()) as generate, patch.object(analysis.time, 'time', return_value=10000) as clock:
+            with self.assertRaises(analysis.AnalysisError):
+                analysis.analyze(db, 'session', 'source', self.answers)
+            clock.return_value += 9
+            with self.assertRaises(analysis.AnalysisError) as caught:
+                analysis.analyze(db, 'new-session', 'source', self.answers)
+            self.assertEqual(caught.exception.status, 429)
+            self.assertIn('1 ثانیه', caught.exception.message)
+            self.assertEqual(generate.call_count, 1)
+            with self.assertRaises(analysis.AnalysisError) as caught:
+                analysis.analyze(db, 'other-session', 'other-source', self.answers)
+            self.assertEqual(caught.exception.status, 502)
+            clock.return_value += 1
+            with self.assertRaises(analysis.AnalysisError) as caught:
+                analysis.analyze(db, 'session', 'source', self.answers)
+            self.assertEqual(caught.exception.status, 502)
+
+    def test_successful_hourly_quota_and_expiry(self):
+        with self.database() as db, patch.object(analysis, 'generate_report', return_value=sample_report()) as generate, patch.object(analysis.time, 'time', return_value=10000) as clock:
+            for index in range(3):
+                analysis.analyze(db, f'session-{index}', 'source', self.answers)
+                clock.return_value += 10
+            with self.assertRaises(analysis.AnalysisError) as caught:
+                analysis.analyze(db, 'fourth-session', 'source', self.answers)
+            self.assertEqual(caught.exception.status, 429)
+            self.assertIn('۳ تحلیل موفق', caught.exception.message)
+            self.assertEqual(generate.call_count, 3)
+            analysis.analyze(db, 'session-0', 'source', self.answers)
+            self.assertEqual(generate.call_count, 3)
+            clock.return_value = 13600
+            analysis.analyze(db, 'fourth-session', 'source', self.answers)
+            self.assertEqual(generate.call_count, 4)
+
+    def test_legacy_failures_do_not_block_retry(self):
+        with self.database() as db, patch.object(analysis, 'generate_report', return_value=sample_report()):
+            db.execute('CREATE TABLE assessment_usage (source_hash TEXT NOT NULL, at INTEGER NOT NULL)')
+            source_hash = analysis.hashlib.sha256(b'source').hexdigest()
+            db.executemany('INSERT INTO assessment_usage VALUES(?,?)', [(source_hash, int(analysis.time.time()))] * 3)
+            db.commit()
+            self.assertEqual(analysis.analyze(db, 'session', 'source', self.answers), sample_report())
+
+    def test_stale_reservations_are_released(self):
+        with self.database() as db, patch.object(analysis, 'generate_report', return_value=sample_report()), patch.object(analysis.time, 'time', return_value=10000):
+            source_hash = analysis.hashlib.sha256(b'source').hexdigest()
+            db.executemany("INSERT INTO assessment_attempts(source_hash,at,state) VALUES(?,?,'processing')", [(source_hash, 9900)] * 3)
+            db.commit()
+            self.assertEqual(analysis.analyze(db, 'session', 'source', self.answers), sample_report())
+            self.assertEqual(db.execute("SELECT count(*) FROM assessment_attempts WHERE state='failed'").fetchone()[0], 3)
+
+    def test_processing_reservations_enforce_limits(self):
+        with self.database() as db, patch.object(analysis, 'generate_report') as generate, patch.object(analysis.time, 'time', return_value=10000):
+            source_hash = analysis.hashlib.sha256(b'source').hexdigest()
+            db.executemany("INSERT INTO assessment_attempts(source_hash,at,state) VALUES(?,?,'processing')", [(source_hash, 9980)] * 3)
+            db.commit()
             with self.assertRaises(analysis.AnalysisError) as caught:
                 analysis.analyze(db, 'session', 'source', self.answers)
             self.assertEqual(caught.exception.status, 429)
-            self.assertEqual(db.execute('SELECT count(*) FROM assessment_jobs').fetchone()[0], 0)
+            generate.assert_not_called()
+
+    def test_global_success_quota_and_failure_exclusion(self):
+        with self.database() as db, patch.object(analysis, 'generate_report', return_value=sample_report()) as generate, patch.object(analysis.time, 'time', return_value=10000):
+            db.executemany("INSERT INTO assessment_attempts(source_hash,at,state) VALUES(?,?,'failed')", [('other', 9980)] * 100)
+            db.executemany("INSERT INTO assessment_attempts(source_hash,at,state) VALUES(?,?,'ready')", [('other', 9980)] * 99)
+            db.commit()
+            analysis.analyze(db, 'session', 'source', self.answers)
+            with self.assertRaises(analysis.AnalysisError) as caught:
+                analysis.analyze(db, 'another-session', 'another-source', self.answers)
+            self.assertEqual(caught.exception.status, 429)
+            self.assertEqual(generate.call_count, 1)
 
     def test_concurrent_duplicate(self):
         entered, finish = threading.Event(), threading.Event()

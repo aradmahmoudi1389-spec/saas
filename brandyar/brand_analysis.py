@@ -179,8 +179,9 @@ def initialize(db):
         CREATE TABLE IF NOT EXISTS assessment_jobs (
             session_hash TEXT NOT NULL, fingerprint TEXT NOT NULL, state TEXT NOT NULL,
             created INTEGER NOT NULL, report TEXT, PRIMARY KEY(session_hash, fingerprint));
-        CREATE TABLE IF NOT EXISTS assessment_usage (source_hash TEXT NOT NULL, at INTEGER NOT NULL);
-        CREATE INDEX IF NOT EXISTS assessment_usage_lookup ON assessment_usage(source_hash,at);
+        CREATE TABLE IF NOT EXISTS assessment_attempts (
+            id INTEGER PRIMARY KEY, source_hash TEXT NOT NULL, at INTEGER NOT NULL, state TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS assessment_attempts_lookup ON assessment_attempts(source_hash,at);
     ''')
 
 
@@ -192,7 +193,8 @@ def analyze(db, session, source, answers):
     source_hash = hashlib.sha256(source.encode()).hexdigest()
     db.execute('BEGIN IMMEDIATE')
     try:
-        db.execute('DELETE FROM assessment_usage WHERE at<?', (now - 86400,))
+        db.execute('DELETE FROM assessment_attempts WHERE at<?', (now - 86400,))
+        db.execute("UPDATE assessment_attempts SET state='failed' WHERE state='processing' AND at<?", (now - 90,))
         db.execute("DELETE FROM assessment_jobs WHERE created<? OR (state='processing' AND created<?)", (now - 3600, now - 90))
         prior = db.execute('SELECT * FROM assessment_jobs WHERE session_hash=? AND fingerprint=?', (session_hash, fingerprint)).fetchone()
         if prior:
@@ -201,13 +203,19 @@ def analyze(db, session, source, answers):
             report = validate_report(parse_json(prior['report']))
             db.commit()
             return report
+        recent = db.execute('SELECT max(at) FROM assessment_attempts WHERE source_hash=?', (source_hash,)).fetchone()[0]
+        if recent is not None and recent > now - 10:
+            remaining = recent + 10 - now
+            raise AnalysisError(429, f'لطفاً {remaining} ثانیه صبر کن و دوباره تلاش کن. پاسخ‌های شما حفظ شده‌اند.')
         in_progress = db.execute("SELECT count(*) FROM assessment_jobs WHERE state='processing'").fetchone()[0]
-        local_usage = db.execute('SELECT count(*) FROM assessment_usage WHERE source_hash=? AND at>?', (source_hash, now - 3600)).fetchone()[0]
-        global_usage = db.execute('SELECT count(*) FROM assessment_usage WHERE at>?', (now - 3600,)).fetchone()[0]
-        if local_usage >= 3 or global_usage >= 100 or in_progress >= 4:
-            raise AnalysisError(429, 'تعداد درخواست‌ها زیاد است. لطفاً بعداً دوباره تلاش کن.')
+        local_usage = db.execute("SELECT count(*) FROM assessment_attempts WHERE source_hash=? AND at>? AND state IN ('ready','processing')", (source_hash, now - 3600)).fetchone()[0]
+        global_usage = db.execute("SELECT count(*) FROM assessment_attempts WHERE at>? AND state IN ('ready','processing')", (now - 3600,)).fetchone()[0]
+        if local_usage >= 3:
+            raise AnalysisError(429, 'سقف ۳ تحلیل موفق در ساعت تکمیل شده است. لطفاً پس از آزادشدن سهمیه دوباره تلاش کن.')
+        if global_usage >= 100 or in_progress >= 4:
+            raise AnalysisError(429, 'سرویس تحلیل در حال حاضر شلوغ است. لطفاً کمی بعد دوباره تلاش کن.')
         db.execute('INSERT INTO assessment_jobs VALUES(?,?,?,?,NULL)', (session_hash, fingerprint, 'processing', now))
-        db.execute('INSERT INTO assessment_usage VALUES(?,?)', (source_hash, now))
+        attempt = db.execute("INSERT INTO assessment_attempts(source_hash,at,state) VALUES(?,?,'processing')", (source_hash, now)).lastrowid
         db.commit()
     except Exception:
         db.rollback()
@@ -215,9 +223,11 @@ def analyze(db, session, source, answers):
     try:
         report = generate_report(answers)
         db.execute("UPDATE assessment_jobs SET state='ready',report=? WHERE session_hash=? AND fingerprint=?", (json.dumps(report, ensure_ascii=False), session_hash, fingerprint))
+        db.execute("UPDATE assessment_attempts SET state='ready' WHERE id=?", (attempt,))
         db.commit()
         return report
     except Exception:
         db.execute('DELETE FROM assessment_jobs WHERE session_hash=? AND fingerprint=?', (session_hash, fingerprint))
+        db.execute("UPDATE assessment_attempts SET state='failed' WHERE id=?", (attempt,))
         db.commit()
         raise
