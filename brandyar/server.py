@@ -11,6 +11,7 @@ import struct
 import time
 import ssl
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from ipaddress import ip_address
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -153,6 +154,15 @@ class Handler(BaseHTTPRequestHandler):
     def assessment_https(self):
         return isinstance(self.connection, ssl.SSLSocket) or (self.client_address[0] in ('127.0.0.1', '::1') and self.headers.get('X-Forwarded-Proto') == 'https')
 
+    def assessment_source(self):
+        peer = self.client_address[0]
+        if peer in ('127.0.0.1', '::1'):
+            try:
+                return str(ip_address(self.headers.get('X-Forwarded-For', '')))
+            except ValueError:
+                pass
+        return peer
+
     def assessment_session(self):
         value = next((v.strip().split('=', 1)[1] for v in self.headers.get('Cookie', '').split(';') if v.strip().startswith('brandyassessment=')), '')
         if len(value) > 150:
@@ -193,7 +203,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(422, {'error': 'پاسخ‌های ارزیابی کامل یا معتبر نیستند. لطفاً آن‌ها را بررسی کن.'})
         try:
             with connect() as db:
-                report = brand_analysis.analyze(db, session, self.client_address[0], answers)
+                report = brand_analysis.analyze(db, session, self.assessment_source(), answers)
             return self.json(200, {'report': report})
         except brand_analysis.AnalysisError as error:
             return self.json(error.status, {'error': error.message})

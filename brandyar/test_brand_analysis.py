@@ -184,6 +184,18 @@ class EndpointTests(unittest.TestCase):
         connection.close()
         return result
 
+    def test_proxy_source_trust(self):
+        handler = object.__new__(server.Handler)
+        for peer, forwarded, expected in [
+            ('127.0.0.1', '192.0.2.10', '192.0.2.10'),
+            ('::1', '2001:db8::1', '2001:db8::1'),
+            ('192.0.2.20', '192.0.2.10', '192.0.2.20'),
+            ('127.0.0.1', '192.0.2.10, 192.0.2.20', '127.0.0.1'),
+        ]:
+            handler.client_address = (peer, 12345)
+            handler.headers = {'X-Forwarded-For': forwarded}
+            self.assertEqual(handler.assessment_source(), expected)
+
     def test_transport_config_origin_and_session(self):
         status, data, _ = self.request('GET', '/api/assessment/status')
         self.assertEqual(status, 200); self.assertFalse(data['ready'])
