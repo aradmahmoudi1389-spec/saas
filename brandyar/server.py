@@ -9,9 +9,14 @@ import secrets
 import sqlite3
 import struct
 import time
+import ssl
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
+
+import brand_analysis
+
+ASSESSMENT_COOKIE_KEY = secrets.token_bytes(32)
 
 ROOT = Path(__file__).resolve().parent
 DB = Path(os.environ.get('BRANDYAR_DB', str(ROOT / '.data' / 'brandyar.sqlite3')))
@@ -108,11 +113,11 @@ class Handler(BaseHTTPRequestHandler):
     def json(self, status, payload, headers=None):
         self.respond(status, json.dumps(payload, ensure_ascii=False).encode(), headers=headers)
 
-    def request_data(self):
+    def request_data(self, maximum=4096, parser=None):
         length = int(self.headers.get('Content-Length', '0'))
-        if length < 1 or length > 4096 or self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
+        if length < 1 or length > maximum or self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
             raise ValueError('Invalid request')
-        data = json.loads(self.rfile.read(length))
+        data = (parser or json.loads)(self.rfile.read(length))
         if not isinstance(data, dict):
             raise ValueError('Invalid request')
         return data
@@ -145,8 +150,60 @@ class Handler(BaseHTTPRequestHandler):
         db.commit()
         return blocked
 
+    def assessment_https(self):
+        return isinstance(self.connection, ssl.SSLSocket) or (self.client_address[0] in ('127.0.0.1', '::1') and self.headers.get('X-Forwarded-Proto') == 'https')
+
+    def assessment_session(self):
+        value = next((v.strip().split('=', 1)[1] for v in self.headers.get('Cookie', '').split(';') if v.strip().startswith('brandyassessment=')), '')
+        if len(value) > 150:
+            return None
+        parts = value.split('.')
+        if len(parts) != 3 or not parts[0].isascii() or not parts[0].isdigit() or len(parts[0]) > 10 or len(parts[1]) != 64 or len(parts[2]) != 64:
+            return None
+        if not 0 <= int(time.time()) - int(parts[0]) < 3600:
+            return None
+        signature = hmac.new(ASSESSMENT_COOKIE_KEY, '.'.join(parts[:2]).encode(), hashlib.sha256).hexdigest()
+        return value if hmac.compare_digest(signature, parts[2]) else None
+
+    def assessment_status(self):
+        if not self.assessment_https():
+            return self.json(200, {'ready': False, 'error': 'ارسال تحلیل تا فعال‌شدن اتصال امن سایت در دسترس نیست. پاسخ‌های شما حفظ می‌شوند.'})
+        if not brand_analysis.configured():
+            return self.json(200, {'ready': False, 'error': 'تحلیل هوشمند هنوز فعال نشده است. پاسخ‌های شما حفظ می‌شوند.'})
+        headers = {}
+        if not self.assessment_session():
+            value = f'{int(time.time())}.{secrets.token_hex(32)}'
+            signature = hmac.new(ASSESSMENT_COOKIE_KEY, value.encode(), hashlib.sha256).hexdigest()
+            headers['Set-Cookie'] = f'brandyassessment={value}.{signature}; HttpOnly; Secure; SameSite=Strict; Path=/api/assessment/; Max-Age=3600'
+        return self.json(200, {'ready': True}, headers)
+
+    def assessment_analyze(self):
+        if not self.assessment_https():
+            return self.json(503, {'error': 'برای ارسال پاسخ‌ها، اتصال امن سایت باید فعال باشد.'})
+        if not self.safe_origin():
+            return self.json(403, {'error': 'این درخواست مجاز نیست.'})
+        if not brand_analysis.configured():
+            return self.json(503, {'error': 'تحلیل هوشمند هنوز فعال نشده است. پاسخ‌های شما حفظ شده‌اند.'})
+        session = self.assessment_session()
+        if not session:
+            return self.json(401, {'error': 'جلسهٔ ارزیابی معتبر نیست. دوباره تلاش کن.'})
+        try:
+            answers = brand_analysis.validate_answers(self.request_data(16384, brand_analysis.parse_json))
+        except (ValueError, UnicodeError, RecursionError):
+            return self.json(422, {'error': 'پاسخ‌های ارزیابی کامل یا معتبر نیستند. لطفاً آن‌ها را بررسی کن.'})
+        try:
+            with connect() as db:
+                report = brand_analysis.analyze(db, session, self.client_address[0], answers)
+            return self.json(200, {'report': report})
+        except brand_analysis.AnalysisError as error:
+            return self.json(error.status, {'error': error.message})
+        except (sqlite3.Error, ValueError, TypeError):
+            return self.json(503, {'error': brand_analysis.ERROR})
+
     def do_GET(self):
         path = urlsplit(self.path).path
+        if path == '/api/assessment/status':
+            return self.assessment_status()
         public = {'/', '/index.html', '/styles.css', '/typography.css', '/app.js', '/logo.jpg'}
         is_font = path.startswith('/fonts/') and path.endswith('.woff2') and '..' not in path
         with connect() as db:
@@ -181,6 +238,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlsplit(self.path).path
+        if path == '/api/assessment/analyze':
+            return self.assessment_analyze()
         if not self.safe_origin():
             return self.json(403, {'error': 'Forbidden'})
         try:

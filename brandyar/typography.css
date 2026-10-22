@@ -1314,6 +1314,16 @@ html { -webkit-text-size-adjust: 100%; }
 .assessment-progress progress { display: block; width: 100%; height: 13px; margin-top: 12px; accent-color: #60bd95; }
 .assessment-question .card-actions { justify-content: space-between; margin-top: 22px; }
 .report-layout > .panel { margin-block: 16px; }
+.assessment-layout { min-width: 0; overflow-wrap: anywhere; }
+.assessment-layout .btn { min-height: 48px; white-space: normal; max-width: 100%; }
+.assessment-layout :is(a,button,input,textarea):focus-visible { outline: 3px solid #237466; outline-offset: 3px; }
+.assessment-processing-note { margin-block: 20px 10px; }
+.report-priorities > li { padding-block: 12px; border-bottom: 1px solid #a4bdb0; }
+.report-priorities h3 { font-size: 18px; line-height: 1.8; }
+.report-disclaimer { color: #526b60; font-size: 13px; line-height: 2; }
+[data-theme="dark"] .report-disclaimer { color: #bfd4c7; }
+[data-theme="dark"] .assessment-layout :is(a,button,input,textarea):focus-visible { outline-color: #8ed7b8; }
+@media (prefers-reduced-motion: reduce) { .assessment-layout .skeleton { animation: none; } }
 .report-list { padding-inline-start: 28px; line-height: 2.2; }
 .report-layout li { margin-bottom: 9px; }
 [data-theme="dark"] .assessment-choices label { border-color: #678273; }
