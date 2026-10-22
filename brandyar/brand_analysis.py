@@ -166,7 +166,11 @@ def generate_report(answers):
             raise ValueError('Incomplete response')
         report = parse_json(choice['message']['content'])
         return validate_report(report)
-    except (HTTPError, URLError, TimeoutError, OSError, ValueError, KeyError, IndexError, TypeError, RecursionError):
+    except HTTPError as error:
+        if error.code == 402:
+            raise AnalysisError(503, 'سرویس تحلیل به‌دلیل مشکل اعتبار یا پرداخت موقتاً در دسترس نیست. پاسخ‌های شما حفظ شده‌اند؛ لطفاً پس از رفع مشکل دوباره تلاش کنید.') from None
+        raise AnalysisError() from None
+    except (URLError, TimeoutError, OSError, ValueError, KeyError, IndexError, TypeError, RecursionError):
         raise AnalysisError() from None
 
 

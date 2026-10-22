@@ -8,7 +8,7 @@ from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 
 import brand_analysis as analysis
 import server
@@ -83,6 +83,17 @@ class SchemaTests(unittest.TestCase):
             with self.assertRaises(analysis.AnalysisError) as caught:
                 analysis.generate_report({})
         self.assertEqual(caught.exception.status, 503)
+
+    def test_provider_payment_failure(self):
+        with patch.dict('os.environ', {'BRANDYAR_METIS_API_KEY': 'unit-test-only'}), patch.object(analysis, 'build_opener') as opener:
+            for code in (402, 401, 500):
+                opener.return_value.open.side_effect = HTTPError(analysis.ENDPOINT, code, 'private provider details', {}, None)
+                with self.subTest(code=code), self.assertRaises(analysis.AnalysisError) as caught:
+                    analysis.generate_report({})
+                self.assertEqual(caught.exception.status, 503 if code == 402 else 502)
+                self.assertNotIn('private', caught.exception.message)
+                if code == 402:
+                    self.assertIn('اعتبار یا پرداخت', caught.exception.message)
 
     def test_provider_contract_and_failures(self):
         envelope = {'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps(sample_report())}}]}
