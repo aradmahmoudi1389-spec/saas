@@ -283,13 +283,8 @@ function assessmentStepMarkup(){const flow=assessmentFlow(),question=flow[assess
 function updateAssessment(){const stage=document.getElementById('assessment-stage');if(stage){stage.innerHTML=assessmentStepMarkup();stage.querySelector('input:not([type=checkbox]):not([type=radio]),textarea,input[type=radio]:checked,input[type=checkbox]:checked')?.focus()}}
 function assessmentPage(){return `${pageHero('ارزیابی رایگان پیج','چند سؤال ساده، یک قدم روشن‌تر','چند سؤال ساده دربارهٔ پیج و کارهایی که این روزها انجام می‌دهی می‌پرسیم. جواب درست و غلط وجود ندارد؛ اگر کاری را هنوز انجام نداده‌ای، همان جواب به ما کمک می‌کند قدم بعدی مناسب‌تری پیشنهاد بدهیم. این نتیجهٔ اولیه فقط بر اساس پاسخ‌های تو ساخته می‌شود و پیجت به‌صورت خودکار بررسی نمی‌شود.')}<section class="section"><div class="container assessment-layout"><div class="notice">حدود ۵ تا ۷ دقیقه · بدون ثبت‌نام یا اتصال به اینستاگرام · تحلیل با رضایت شما و پس از فعال‌سازی سرویس انجام می‌شود؛ پیش از ارسال، شیوهٔ پردازش را می‌بینی.</div><div id="assessment-stage">${assessmentStepMarkup()}</div></div></section>`}
 function consultationDate(value) {
+  if (value.startsAt == null) return 'زمان جلسه با تماس هماهنگ می‌شود';
   return new Intl.DateTimeFormat('fa-IR-u-ca-persian', {dateStyle:'full', timeStyle:'short', timeZone:value.timeZone}).format(new Date(value.startsAt * 1000));
-}
-function consultationSlotsMarkup() {
-  return assessmentConsultation.slots.map(slot => {
-    const expired = slot.startsAt * 1000 <= Date.now();
-    return `<label><input type="radio" name="slotId" value="${slot.id}" required ${expired?'disabled':''}><span>${esc(consultationDate(slot))} · ${new Intl.NumberFormat('fa-IR').format(slot.durationMinutes)} دقیقه${expired?' (غیرقابل‌انتخاب)':''}</span></label>`;
-  }).join('');
 }
 function updateConsultation() {
   const host = document.getElementById('report-consultation');
@@ -300,48 +295,36 @@ function updateConsultation() {
   requestAnimationFrame(() => card?.classList.add('is-visible'));
   host.querySelector('h2')?.focus({preventScroll:true});
 }
-async function loadConsultation(preserveForm = false) {
+async function loadConsultation() {
   if (assessmentConsultationLoading || consultationSubmitting || !validBrandReport(assessmentResult)) return;
   assessmentConsultationLoading = true;
   assessmentConsultationError = '';
-  if (!preserveForm) updateConsultation();
+  updateConsultation();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
     const response = await fetch('/api/assessment/consultation', {credentials:'same-origin', cache:'no-store', signal:controller.signal});
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'زمان‌های مشاوره در دسترس نیستند.');
+    if (!response.ok) throw new Error(data.error || 'اطلاعات مشاوره در دسترس نیست.');
     assessmentConsultation = data;
-    if (preserveForm && !['pending','confirmed'].includes(data.request?.state)) {
-      const choices = document.querySelector('#consultation-form .consultation-slots');
-      if (choices) choices.innerHTML = '<legend>زمان درخواستی</legend>' + consultationSlotsMarkup();
-      return;
-    }
     consultationBookingOpen = false;
   } catch (error) {
-    assessmentConsultationError = ['TypeError','SyntaxError','AbortError'].includes(error.name) ? 'دریافت زمان‌ها انجام نشد. لطفاً دوباره تلاش کن.' : error.message;
-    if (preserveForm) {
-      const feedback = document.getElementById('consultation-feedback');
-      if (feedback) feedback.textContent = assessmentConsultationError;
-      return;
-    }
+    assessmentConsultationError = ['TypeError','SyntaxError','AbortError'].includes(error.name) ? 'دریافت وضعیت انجام نشد. لطفاً دوباره تلاش کن.' : error.message;
   } finally {
     clearTimeout(timer);
     assessmentConsultationLoading = false;
-    if (!preserveForm || ['pending','confirmed'].includes(assessmentConsultation?.request?.state)) updateConsultation();
+    updateConsultation();
   }
 }
 function consultationMarkup() {
   const heading = '<h2 tabindex="-1">دربارهٔ گزارش برندت با هم صحبت کنیم</h2>';
-  if (!assessmentConsultation && !assessmentConsultationLoading && !assessmentConsultationError) return `<article class="panel consultation-invite">${heading}<p>اگر می‌خواهی مسیر رشدت را دقیق‌تر بررسی کنیم، شماره‌ات را بگذار و زمان مناسب برای مشاوره را انتخاب کن. پس از تأیید زمان، هماهنگی نهایی انجام می‌شود.</p><button class="btn btn-outline" type="button" id="consultation-open">درخواست مشاوره</button><p class="hint">اگر قبلاً درخواستی ثبت کرده‌ای، وضعیت آن را از همین دکمه ببین.</p></article>`;
-  if (assessmentConsultationLoading) return `<article class="panel consultation-invite" aria-busy="true">${heading}<p role="status">در حال دریافت زمان‌های آزاد…</p></article>`;
+  if (assessmentConsultationLoading) return `<article class="panel consultation-invite" aria-busy="true">${heading}<p role="status">در حال دریافت وضعیت درخواست…</p></article>`;
   if (assessmentConsultationError) return `<article class="panel consultation-invite">${heading}<p class="error" role="alert">${esc(assessmentConsultationError)}</p><button class="btn btn-outline" type="button" id="consultation-open">تلاش دوباره</button></article>`;
-  if (assessmentConsultation.request && !consultationBookingOpen) {
+  if (assessmentConsultation?.request && !consultationBookingOpen) {
     const request = assessmentConsultation.request;
-    return `<article class="panel consultation-invite"><h2 tabindex="-1">وضعیت درخواست مشاوره</h2><p role="status">${esc(request.status)} · ${esc(consultationDate(request))}</p>${request.state==='pending'?'<p>درخواستت ثبت شد. بعد از تأیید زمان، برای هماهنگی با تو تماس می‌گیریم. این زمان هنوز قطعی نیست.</p>':''}<p class="hint">شمارهٔ تماس فقط برای هماهنگی مشاوره استفاده می‌شود.</p><div class="card-actions"><button class="btn btn-outline" type="button" id="consultation-open">به‌روزرسانی وضعیت</button>${['cancelled','completed'].includes(request.state)?'<button class="btn btn-outline" type="button" id="consultation-new">درخواست جدید</button>':''}</div></article>`;
+    return `<article class="panel consultation-invite"><h2 tabindex="-1">وضعیت درخواست مشاوره</h2><p role="status">${esc(request.status)} · ${esc(consultationDate(request))}</p>${request.state==='pending'?`<p>${request.startsAt == null?'شماره‌ات ثبت شد. برای هماهنگی زمان جلسهٔ مشاوره با تو تماس می‌گیریم.':'درخواستت ثبت شد. بعد از تأیید زمان، برای هماهنگی با تو تماس می‌گیریم. این زمان هنوز قطعی نیست.'}</p>`:''}<p class="hint">شمارهٔ تماس فقط برای هماهنگی مشاوره استفاده می‌شود.</p><div class="card-actions"><button class="btn btn-outline" type="button" id="consultation-open">به‌روزرسانی وضعیت</button>${['cancelled','completed'].includes(request.state)?'<button class="btn btn-outline" type="button" id="consultation-new">درخواست جدید</button>':''}</div></article>`;
   }
-  if (!assessmentConsultation.slots.length) return `<article class="panel consultation-invite">${heading}<p>فعلاً زمان آزادی برای انتخاب وجود ندارد. هیچ زمانی ثبت نشده است.</p><button class="btn btn-outline" type="button" id="consultation-open">بررسی زمان‌های جدید</button></article>`;
-  return `<article class="panel consultation-invite">${heading}<p>زمان‌ها به وقت ${esc(assessmentConsultation.timeZoneLabel)} هستند؛ ثبت درخواست به معنی تأیید نهایی زمان نیست.</p><form id="consultation-form"><div class="field"><label for="consultation-name">نام (اختیاری)</label><input id="consultation-name" name="name" maxlength="120" autocomplete="name"></div><div class="field"><label for="consultation-phone">شمارهٔ موبایل</label><input id="consultation-phone" name="phone" type="tel" inputmode="tel" maxlength="32" autocomplete="tel" dir="ltr" required aria-describedby="consultation-privacy"></div><fieldset class="consultation-slots"><legend>زمان درخواستی</legend>${consultationSlotsMarkup()}</fieldset><button class="btn btn-outline" id="consultation-refresh-slots" type="button">به‌روزرسانی زمان‌ها</button><div class="field"><label for="consultation-notes">توضیح کوتاه (اختیاری؛ حداکثر ۲۰۰ نویسه)</label><textarea id="consultation-notes" name="notes" maxlength="200" rows="3"></textarea></div><p class="hint" id="consultation-privacy">شمارهٔ تماس فقط برای هماهنگی مشاوره در سرور ذخیره می‌شود و به هوش مصنوعی یا سرویس تحلیلی ارسال نمی‌شود. <a href="#/privacy">حریم خصوصی</a></p><div class="form-feedback" id="consultation-feedback" role="status" aria-live="polite"></div><div class="card-actions"><button class="btn btn-outline" type="submit" ${consultationSubmitting?'disabled':''}>ثبت درخواست</button></div></form></article>`;
+  return `<article class="panel consultation-invite">${heading}<p>نتیجهٔ تست، شروع مسیر رشد برند توست. در یک جلسهٔ مشاوره می‌توانیم گزارش و قدم‌های بعدی را با هم بررسی کنیم. شماره‌ات را ثبت کن تا برای هماهنگی زمان جلسه با تو تماس بگیریم.</p><form id="consultation-form"><div class="field"><label for="consultation-name">نام (اختیاری)</label><input id="consultation-name" name="name" maxlength="120" autocomplete="name"></div><div class="field"><label for="consultation-phone">شمارهٔ موبایل برای هماهنگی جلسه</label><input id="consultation-phone" name="phone" type="tel" inputmode="tel" maxlength="32" autocomplete="tel" dir="ltr" required aria-describedby="consultation-privacy"></div><div class="field"><label for="consultation-notes">توضیح کوتاه (اختیاری؛ حداکثر ۲۰۰ نویسه)</label><textarea id="consultation-notes" name="notes" maxlength="200" rows="3"></textarea></div><p class="hint" id="consultation-privacy">شمارهٔ تماس فقط برای هماهنگی مشاوره در سرور ذخیره می‌شود و به هوش مصنوعی یا سرویس تحلیلی ارسال نمی‌شود. زمان جلسه پس از تماس و هماهنگی مشخص می‌شود. <a href="#/privacy">حریم خصوصی</a></p><div class="form-feedback" id="consultation-feedback" role="status" aria-live="polite"></div><div class="card-actions"><button class="btn btn-outline" type="submit" ${consultationSubmitting?'disabled':''}>ثبت شماره برای هماهنگی مشاوره</button><button class="btn btn-outline" type="button" id="consultation-open">پیگیری درخواست قبلی</button></div></form></article>`;
 }
 async function submitConsultation(form) {
   if (consultationSubmitting) return;
@@ -355,7 +338,7 @@ async function submitConsultation(form) {
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
     const values = new FormData(form);
-    const response = await fetch('/api/assessment/consultation', {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, signal:controller.signal, body:JSON.stringify({name:String(values.get('name')||''), phone:String(values.get('phone')||''), slotId:Number(values.get('slotId')), notes:String(values.get('notes')||'')})});
+    const response = await fetch('/api/assessment/consultation', {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, signal:controller.signal, body:JSON.stringify({name:String(values.get('name')||''), phone:String(values.get('phone')||''), slotId:null, notes:String(values.get('notes')||'')})});
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'ثبت درخواست انجام نشد.');
     assessmentConsultation = {request:data.request, slots:[]};
@@ -387,7 +370,6 @@ document.addEventListener('submit',event=>{if(event.target.id==='consultation-fo
 document.addEventListener('change',event=>{const input=event.target,form=input.closest('#assessment-step-form');if(!form)return;const question=assessmentFlow()[assessmentStep];if(input.name==='skip'){const text=form.querySelector('#assessment-answer');text.disabled=input.checked;text.required=!input.checked;if(input.checked)text.value=''}if(question.type==='multi'&&input.name==='answer'&&question.none&&input.checked){const inputs=[...form.querySelectorAll('[name=answer]')];if(question.options[Number(input.value)]===question.none)inputs.forEach(other=>{if(other!==input)other.checked=false});else inputs[question.options.indexOf(question.none)].checked=false}if(question.max&&form.querySelectorAll('[name=answer]:checked').length>question.max){input.checked=false;form.querySelector('#assessment-feedback').textContent=`حداکثر ${question.max} گزینه انتخاب کن.`}else form.querySelector('#assessment-feedback').textContent=''});
 document.addEventListener('click',event=>{
   if(event.target.id==='consultation-open') loadConsultation();
-  else if(event.target.id==='consultation-refresh-slots') loadConsultation(true);
   else if(event.target.id==='consultation-new') {consultationBookingOpen=true;updateConsultation()}
   else if(event.target.id==='assessment-retry') submitBrandAnalysis();
   else if(event.target.id==='assessment-edit') {

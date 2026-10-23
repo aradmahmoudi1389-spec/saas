@@ -103,11 +103,12 @@ function harness(saved=null) {
   booking.run('assessmentResult = reportFixture');
   assert(booking.run('reportPage()').includes('id="report-consultation"'));
   assert(booking.run('reportPage()').includes('دربارهٔ گزارش برندت با هم صحبت کنیم'));
+  assert(booking.run('reportPage()').includes('id="consultation-phone"'));
+  assert(booking.run('reportPage()').includes('ثبت شماره برای هماهنگی مشاوره'));
+  assert.equal(booking.requests.length,0);
   const host = {innerHTML:'',querySelector:()=>null};
   const feedback = {textContent:''};
-  const choices = {innerHTML:''};
   booking.context.document.getElementById = id => id === 'report-consultation' ? host : id === 'consultation-feedback' ? feedback : null;
-  booking.context.document.querySelector = selector => selector === '#consultation-form .consultation-slots' ? choices : null;
   let releaseSlots;
   booking.context.fetch = async (url,options) => {
     booking.requests.push({url,options});
@@ -119,21 +120,17 @@ function harness(saved=null) {
   await booking.run('loadConsultation()');
   assert.equal(booking.requests.length,1);
   releaseSlots(); await loadingSlots;
-  assert(host.innerHTML.includes('هیچ زمانی ثبت نشده است'));
-  assert(!host.innerHTML.includes('id="consultation-form"'));
+  assert(host.innerHTML.includes('id="consultation-form"'));
+  assert(!host.innerHTML.includes('name="slotId"'));
+  assert(host.innerHTML.includes('href="#/privacy"'));
+  assert(host.innerHTML.includes('زمان جلسه پس از تماس و هماهنگی مشخص می‌شود'));
   const slot = {id:1,startsAt:Math.floor(Date.now()/1000)+86400,durationMinutes:60,timeZone:'Asia/Tehran'};
   booking.context.slotFixture = slot;
-  booking.run("assessmentConsultation = {slots:[slotFixture],request:null,timeZoneLabel:'تهران'};updateConsultation()");
-  assert(host.innerHTML.includes('id="consultation-form"'));
-  assert(host.innerHTML.includes('href="#/privacy"'));
-  assert(host.innerHTML.includes('ثبت درخواست به معنی تأیید نهایی زمان نیست'));
-  assert(!host.innerHTML.includes(new Date(slot.startsAt*1000).toISOString().slice(0,10)));
-  booking.run('assessmentConsultation.slots[0].startsAt=1;updateConsultation()');
-  assert(host.innerHTML.includes('required disabled'));
-  assert(host.innerHTML.includes('غیرقابل‌انتخاب'));
-  slot.startsAt = Math.floor(Date.now()/1000)+86400;
+  const formattedDate = booking.run('consultationDate(slotFixture)');
+  assert(!formattedDate.includes(new Date(slot.startsAt*1000).toISOString().slice(0,10)));
+  assert.equal(booking.run('consultationDate({startsAt:null})'),'زمان جلسه با تماس هماهنگ می‌شود');
   const submit = {disabled:false};
-  const form = {values:{name:'',phone:'۰۹۱۲۱۲۳۴۵۶۷',slotId:'1',notes:'موضوع شخصی'},attrs:{},querySelector:selector=>selector==='[type="submit"]'?submit:feedback,setAttribute(key,value){this.attrs[key]=value}};
+  const form = {values:{name:'',phone:'۰۹۱۲۱۲۳۴۵۶۷',notes:'موضوع شخصی'},attrs:{},querySelector:selector=>selector==='[type="submit"]'?submit:feedback,setAttribute(key,value){this.attrs[key]=value}};
   booking.context.formFixture = form;
   const storageBefore = JSON.stringify([...booking.storage]);
   let releaseBooking;
@@ -154,29 +151,23 @@ function harness(saved=null) {
   assert.equal(form.values.notes,'موضوع شخصی');
   assert.equal(feedback.textContent,'این زمان دیگر در دسترس نیست.');
   assert.equal(JSON.stringify([...booking.storage]),storageBefore);
-  const markupBeforeRefresh = host.innerHTML;
-  booking.context.fetch = async ()=>({ok:true,json:async()=>({slots:[slot],request:null,timeZoneLabel:'تهران'})});
-  await booking.run('loadConsultation(true)');
-  assert.equal(host.innerHTML,markupBeforeRefresh);
-  assert(choices.innerHTML.includes('name="slotId"'));
-  assert.equal(form.values.notes,'موضوع شخصی');
   booking.context.fetch = async ()=>{throw new TypeError('private network detail')};
-  await booking.run('loadConsultation(true)');
-  assert.equal(host.innerHTML,markupBeforeRefresh);
-  assert(!feedback.textContent.includes('private'));
   await booking.run('submitConsultation(formFixture)');
   assert(feedback.textContent.includes('پاسخ ثبت دریافت نشد'));
   assert.equal(form.values.phone,'۰۹۱۲۱۲۳۴۵۶۷');
   booking.context.fetch = async (url,options)=>{
     booking.requests.push({url,options});
-    return {ok:true,json:async()=>({request:{...slot,status:'در انتظار تأیید',state:'pending'}})};
+    return {ok:true,json:async()=>({request:{startsAt:null,status:'در انتظار تماس برای هماهنگی زمان',state:'pending'}})};
   };
   await booking.run('submitConsultation(formFixture)');
-  assert(host.innerHTML.includes('این زمان هنوز قطعی نیست'));
+  assert(host.innerHTML.includes('شماره‌ات ثبت شد'));
+  assert(host.innerHTML.includes('برای هماهنگی زمان جلسهٔ مشاوره با تو تماس می‌گیریم'));
+  assert(!host.innerHTML.includes('۱۹۷۰'));
+  assert.equal(JSON.parse(booking.requests.at(-1).options.body).slotId,null);
   assert(!host.innerHTML.includes('id="consultation-form"'));
   assert(!host.innerHTML.includes(form.values.phone));
   assert.equal(JSON.stringify([...booking.storage]),storageBefore);
-  booking.run("assessmentConsultation.request.state='confirmed';assessmentConsultation.request.status='زمان تأیید شد';updateConsultation()");
+  booking.run("assessmentConsultation.request={...slotFixture,state:'confirmed',status:'زمان تأیید شد'};updateConsultation()");
   assert(host.innerHTML.includes('زمان تأیید شد'));
   assert(!host.innerHTML.includes('این زمان هنوز قطعی نیست'));
   for(const state of ['cancelled','completed']){
@@ -186,5 +177,43 @@ function harness(saved=null) {
   }
   assert(booking.requests.every(item=>item.url==='/api/assessment/consultation'));
   assert(booking.requests.every(item=>!item.url.includes(form.values.phone)));
-  console.log('PASS: assessment regression, inline parity, consultation gate/loading/empty/errors/statuses, Persian dates, expired slots, duplicate submit guard, form retention, refresh, contact privacy');
+  const adminElements = new Map();
+  const adminListeners = {};
+  const adminRequests = [];
+  const adminContext = {
+    console, AbortController, setTimeout, clearTimeout,
+    window:{confirm:()=>true},
+    document:{
+      getElementById(id){
+        if(!adminElements.has(id)) adminElements.set(id,{innerHTML:'',textContent:'',value:'',hidden:true,setAttribute(){},addEventListener(){},focus(){}});
+        return adminElements.get(id);
+      },
+      addEventListener:(name,fn)=>adminListeners[name]=fn
+    },
+    fetch:async (url,options)=>{
+      adminRequests.push({url,options});
+      const result = options.method === 'POST' ? {status:'updated'} : url === '/api/admin/me' ? {principal:{role:'owner'},csrf:'test-csrf'} : url === '/api/admin/consultation-slots' ? {slots:[{id:7,starts_at:slot.startsAt,duration_minutes:60,status:'open'}],timeZone:'Asia/Tehran'} : {requests:[{id:3,name:'<img src=x>',phone:'09121234567',starts_at:null,notes:'موضوع تست',status:'pending',created_at:Math.floor(Date.now()/1000)}]};
+      return {ok:true,status:200,json:async()=>result};
+    }
+  };
+  vm.createContext(adminContext);
+  vm.runInContext(fs.readFileSync(`${__dirname}/admin-panel.js`,'utf8'),adminContext);
+  await new Promise(resolve=>setImmediate(resolve));
+  const adminMarkup=adminElements.get('requests').innerHTML;
+  assert(adminMarkup.includes('نیازمند تماس برای هماهنگی'));
+  assert(adminMarkup.includes('id="request-slot-3"'));
+  assert(adminMarkup.includes('value="7"'));
+  assert(!adminMarkup.includes('۱۹۷۰'));
+  assert(!adminMarkup.includes('<img'));
+  const confirmButton={disabled:false,dataset:{request:'3',status:'confirmed'}};
+  const clickEvent={target:{closest:selector=>selector==='[data-request]'?confirmButton:null}};
+  const beforeConfirm=adminRequests.length;
+  await adminListeners.click(clickEvent);
+  assert.equal(adminRequests.length,beforeConfirm);
+  assert(adminElements.get('feedback').textContent.includes('زمان توافق‌شده'));
+  adminElements.get('request-slot-3').value='7';
+  await adminListeners.click(clickEvent);
+  const confirmation=adminRequests.find(item=>item.url==='/api/admin/consultation-status');
+  assert.deepEqual(JSON.parse(confirmation.options.body),{requestId:3,status:'confirmed',slotId:7,csrf:'test-csrf'});
+  console.log('PASS: assessment regression, inline parity, immediate callback form without slots, duplicate prevention, form retention, privacy, admin callback display and scheduling');
 })().catch(error=>{console.error(error);process.exitCode=1;});

@@ -50,7 +50,7 @@ def connect():
         CREATE TABLE IF NOT EXISTS tickets (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), subject TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'باز', created INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY, staff_id INTEGER REFERENCES staff(id), action TEXT NOT NULL, result TEXT NOT NULL, at INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS consultation_slots (id INTEGER PRIMARY KEY, starts_at INTEGER NOT NULL, duration_minutes INTEGER NOT NULL, status TEXT NOT NULL, capacity INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL);
-        CREATE TABLE IF NOT EXISTS consultation_requests (id INTEGER PRIMARY KEY, session_hash TEXT NOT NULL, name TEXT NOT NULL, phone TEXT NOT NULL, slot_id INTEGER NOT NULL REFERENCES consultation_slots(id), notes TEXT NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS consultation_requests (id INTEGER PRIMARY KEY, session_hash TEXT NOT NULL, name TEXT NOT NULL, phone TEXT NOT NULL, slot_id INTEGER REFERENCES consultation_slots(id), notes TEXT NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
         CREATE UNIQUE INDEX IF NOT EXISTS consultation_active_session ON consultation_requests(session_hash) WHERE status IN ('pending','confirmed');
         CREATE UNIQUE INDEX IF NOT EXISTS consultation_active_phone ON consultation_requests(phone) WHERE status IN ('pending','confirmed');
         CREATE UNIQUE INDEX IF NOT EXISTS consultation_active_slot ON consultation_requests(slot_id) WHERE status IN ('pending','confirmed');
@@ -60,6 +60,18 @@ def connect():
         CREATE INDEX IF NOT EXISTS attempts_lookup ON attempts(source,account,at);
         CREATE INDEX IF NOT EXISTS consultation_requests_lookup ON consultation_requests(status,created_at);
     ''')
+    if any(row['name'] == 'slot_id' and row['notnull'] for row in db.execute('PRAGMA table_info(consultation_requests)')):
+        with db:
+            db.execute('BEGIN IMMEDIATE')
+            if any(row['name'] == 'slot_id' and row['notnull'] for row in db.execute('PRAGMA table_info(consultation_requests)')):
+                db.execute('CREATE TABLE consultation_requests_nullable (id INTEGER PRIMARY KEY, session_hash TEXT NOT NULL, name TEXT NOT NULL, phone TEXT NOT NULL, slot_id INTEGER REFERENCES consultation_slots(id), notes TEXT NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)')
+                db.execute('INSERT INTO consultation_requests_nullable SELECT * FROM consultation_requests')
+                db.execute('DROP TABLE consultation_requests')
+                db.execute('ALTER TABLE consultation_requests_nullable RENAME TO consultation_requests')
+                db.execute("CREATE UNIQUE INDEX consultation_active_session ON consultation_requests(session_hash) WHERE status IN ('pending','confirmed')")
+                db.execute("CREATE UNIQUE INDEX consultation_active_phone ON consultation_requests(phone) WHERE status IN ('pending','confirmed')")
+                db.execute("CREATE UNIQUE INDEX consultation_active_slot ON consultation_requests(slot_id) WHERE status IN ('pending','confirmed')")
+                db.execute('CREATE INDEX consultation_requests_lookup ON consultation_requests(status,created_at)')
     return db
 
 
@@ -202,11 +214,12 @@ class Handler(BaseHTTPRequestHandler):
         return [self.consultation_slot(row) for row in rows]
 
     def consultation_status(self, db, session_hash):
-        row = db.execute("SELECT consultation_requests.status,consultation_requests.created_at,consultation_slots.starts_at,consultation_slots.duration_minutes FROM consultation_requests JOIN consultation_slots ON consultation_slots.id=consultation_requests.slot_id WHERE session_hash=? AND consultation_requests.status IN ('pending','confirmed','cancelled','completed') ORDER BY consultation_requests.id DESC LIMIT 1", (session_hash,)).fetchone()
+        row = db.execute("SELECT consultation_requests.status,consultation_requests.created_at,consultation_slots.starts_at,consultation_slots.duration_minutes FROM consultation_requests LEFT JOIN consultation_slots ON consultation_slots.id=consultation_requests.slot_id WHERE session_hash=? AND consultation_requests.status IN ('pending','confirmed','cancelled','completed') ORDER BY consultation_requests.id DESC LIMIT 1", (session_hash,)).fetchone()
         if not row:
             return None
         labels = {'pending': 'در انتظار تأیید', 'confirmed': 'زمان تأیید شد', 'cancelled': 'لغو شد', 'completed': 'انجام شد'}
-        return {'status': labels[row['status']], 'state': row['status'], 'startsAt': row['starts_at'], 'timeZone': CONSULTATION_TIMEZONE}
+        label = 'در انتظار تماس برای هماهنگی زمان' if row['status'] == 'pending' and row['starts_at'] is None else labels[row['status']]
+        return {'status': label, 'state': row['status'], 'startsAt': row['starts_at'], 'timeZone': CONSULTATION_TIMEZONE}
 
     def consultation_phone(self, value):
         if not isinstance(value, str) or len(value) > 32:
@@ -268,7 +281,7 @@ class Handler(BaseHTTPRequestHandler):
             db.commit()
         try:
             data = self.request_data(4096, brand_analysis.parse_json)
-            if set(data) != {'name', 'phone', 'slotId', 'notes'} or not isinstance(data['name'], str) or not isinstance(data['notes'], str) or type(data['slotId']) is not int:
+            if set(data) != {'name', 'phone', 'slotId', 'notes'} or not isinstance(data['name'], str) or not isinstance(data['notes'], str) or (data['slotId'] is not None and type(data['slotId']) is not int):
                 raise ValueError('اطلاعات فرم کامل یا معتبر نیست.')
             name, notes = data['name'].strip(), data['notes'].strip()
             phone, slot_id = self.consultation_phone(data['phone']), data['slotId']
@@ -288,12 +301,13 @@ class Handler(BaseHTTPRequestHandler):
                 active = db.execute("SELECT 1 FROM consultation_requests WHERE session_hash=? AND status IN ('pending','confirmed')", (session_hash,)).fetchone()
                 if active:
                     return self.json(409, {'error': 'یک درخواست فعال برای این نشست وجود دارد.'})
-                slot = db.execute("SELECT * FROM consultation_slots WHERE id=? AND status='open' AND starts_at>?", (slot_id, int(time.time()))).fetchone()
-                if not slot:
-                    return self.json(409, {'error': 'این زمان دیگر در دسترس نیست. زمان دیگری را انتخاب کن.'})
-                occupied = db.execute("SELECT count(*) FROM consultation_requests WHERE slot_id=? AND status IN ('pending','confirmed')", (slot_id,)).fetchone()[0]
-                if occupied >= slot['capacity']:
-                    return self.json(409, {'error': 'این زمان دیگر در دسترس نیست. زمان دیگری را انتخاب کن.'})
+                if slot_id is not None:
+                    slot = db.execute("SELECT * FROM consultation_slots WHERE id=? AND status='open' AND starts_at>?", (slot_id, int(time.time()))).fetchone()
+                    if not slot:
+                        return self.json(409, {'error': 'این زمان دیگر در دسترس نیست. زمان دیگری را انتخاب کن.'})
+                    occupied = db.execute("SELECT count(*) FROM consultation_requests WHERE slot_id=? AND status IN ('pending','confirmed')", (slot_id,)).fetchone()[0]
+                    if occupied >= slot['capacity']:
+                        return self.json(409, {'error': 'این زمان دیگر در دسترس نیست. زمان دیگری را انتخاب کن.'})
                 now = int(time.time())
                 db.execute("INSERT INTO consultation_requests(session_hash,name,phone,slot_id,notes,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)", (session_hash, name, phone, slot_id, notes, 'pending', now, now))
                 db.execute("UPDATE consultation_slots SET status='requested' WHERE id=? AND status='open'", (slot_id,))
@@ -305,13 +319,14 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 db.rollback()
                 raise
-        return self.json(201, {'message': 'درخواستت ثبت شد. بعد از تأیید زمان، برای هماهنگی با تو تماس می‌گیریم.', 'request': state})
+        message = 'شماره‌ات ثبت شد. برای هماهنگی زمان جلسهٔ مشاوره با تو تماس می‌گیریم.' if slot_id is None else 'درخواستت ثبت شد. بعد از تأیید زمان، برای هماهنگی با تو تماس می‌گیریم.'
+        return self.json(201, {'message': message, 'request': state})
 
     def admin_consultation(self, db, staff):
         if staff['role'] not in CONSULTATION_ADMIN_ROLES or not self.assessment_https():
             return self.json(403, {'error': 'این بخش برای نقش شما مجاز نیست یا اتصال امن برقرار نیست.'})
         if self.path == '/api/admin/consultations':
-            rows = db.execute("SELECT r.id,r.name,r.phone,r.notes,r.status,r.created_at,s.starts_at,s.duration_minutes FROM consultation_requests r JOIN consultation_slots s ON s.id=r.slot_id ORDER BY r.id DESC LIMIT 200").fetchall()
+            rows = db.execute("SELECT r.id,r.name,r.phone,r.notes,r.status,r.created_at,s.starts_at,s.duration_minutes FROM consultation_requests r LEFT JOIN consultation_slots s ON s.id=r.slot_id ORDER BY r.id DESC LIMIT 200").fetchall()
             return self.json(200, {'requests': [dict(row) for row in rows]})
         if self.path == '/api/admin/consultation-slots':
             return self.json(200, {'slots': [dict(row) for row in db.execute('SELECT id,starts_at,duration_minutes,status,capacity FROM consultation_slots ORDER BY starts_at DESC LIMIT 200')], 'timeZone': CONSULTATION_TIMEZONE})
@@ -454,10 +469,16 @@ class Handler(BaseHTTPRequestHandler):
                         if status not in transitions[request['status']]: raise ValueError
                         slot = db.execute('SELECT * FROM consultation_slots WHERE id=?', (request['slot_id'],)).fetchone()
                         if status == 'confirmed':
-                            if not slot or slot['starts_at'] <= int(time.time()) or slot['status'] != 'requested': raise ValueError
+                            expected_status = 'requested'
+                            if request['slot_id'] is None:
+                                if type(data.get('slotId')) is not int: raise ValueError
+                                slot = db.execute('SELECT * FROM consultation_slots WHERE id=?', (data['slotId'],)).fetchone()
+                                expected_status = 'open'
+                            if not slot or slot['starts_at'] <= int(time.time()) or slot['status'] != expected_status: raise ValueError
                             overlaps = db.execute("SELECT 1 FROM consultation_requests r JOIN consultation_slots s ON s.id=r.slot_id WHERE r.status='confirmed' AND r.id<>? AND s.starts_at<? AND s.starts_at+s.duration_minutes*60>? LIMIT 1", (request_id, slot['starts_at'] + slot['duration_minutes'] * 60, slot['starts_at'])).fetchone()
                             if overlaps: raise ValueError
-                            db.execute("UPDATE consultation_slots SET status='confirmed' WHERE id=?", (request['slot_id'],))
+                            db.execute('UPDATE consultation_requests SET slot_id=? WHERE id=?', (slot['id'], request_id))
+                            db.execute("UPDATE consultation_slots SET status='confirmed' WHERE id=?", (slot['id'],))
                         elif status == 'cancelled':
                             db.execute("UPDATE consultation_slots SET status='cancelled' WHERE id=?", (request['slot_id'],))
                         elif slot['starts_at'] + slot['duration_minutes'] * 60 > int(time.time()):

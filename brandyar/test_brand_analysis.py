@@ -505,6 +505,74 @@ class ConsultationTests(unittest.TestCase):
             self.assertEqual(db.execute('SELECT count(*) FROM consultation_requests').fetchone()[0], 0)
             self.assertEqual(db.execute('SELECT status FROM consultation_slots WHERE id=?', (slot,)).fetchone()[0], 'open')
 
+    def test_callback_without_available_slots_and_admin_scheduling(self):
+        cookie = self.assessment()
+        status, data, _ = self.call('POST', self.path, self.body(None), cookie)
+        self.assertEqual(status, 201)
+        self.assertIsNone(data['request']['startsAt'])
+        self.assertEqual(data['request']['state'], 'pending')
+        self.assertIn('هماهنگی', data['request']['status'])
+        self.assertNotIn('09121234567', json.dumps(data))
+        self.assertEqual(self.call('GET', self.path, cookie=cookie)[1]['request'], data['request'])
+        self.assertEqual(self.call('POST', self.path, self.body(None), cookie)[0], 409)
+        other = self.assessment()
+        self.assertEqual(self.call('POST', self.path, self.body(None), other)[0], 409)
+        self.assertIsNone(self.call('GET', self.path, cookie=other)[1]['request'])
+        admin, csrf = self.staff()
+        item = self.call('GET', '/api/admin/consultations', cookie=admin)[1]['requests'][0]
+        self.assertEqual(item['phone'], '09121234567')
+        self.assertIsNone(item['starts_at'])
+        payload = {'requestId': item['id'], 'status': 'confirmed', 'csrf': csrf}
+        self.assertEqual(self.call('POST', '/api/admin/consultation-status', payload, admin)[0], 422)
+        blocked = self.slot(status='blocked')
+        self.assertEqual(self.call('POST', '/api/admin/consultation-status', {**payload, 'slotId': blocked}, admin)[0], 422)
+        slot = self.slot()
+        self.assertEqual(self.call('POST', '/api/admin/consultation-status', {**payload, 'slotId': slot}, admin)[0], 200)
+        confirmed = self.call('GET', self.path, cookie=cookie)[1]['request']
+        self.assertEqual(confirmed['state'], 'confirmed')
+        self.assertIsNotNone(confirmed['startsAt'])
+        self.provider.assert_not_called()
+
+    def test_callback_cancellation_without_slot(self):
+        cookie = self.assessment()
+        self.assertEqual(self.call('POST', self.path, self.body(None), cookie)[0], 201)
+        admin, csrf = self.staff()
+        self.assertEqual(self.call('POST', '/api/admin/consultation-status', {'requestId': 1, 'status': 'cancelled', 'csrf': csrf}, admin)[0], 200)
+        self.assertEqual(self.call('GET', self.path, cookie=cookie)[1]['request']['state'], 'cancelled')
+        self.assertEqual(self.call('POST', self.path, self.body(None), cookie)[0], 201)
+
+    def test_parallel_callbacks_cannot_take_same_slot(self):
+        cookies = [self.assessment(), self.assessment()]
+        for index, cookie in enumerate(cookies):
+            self.assertEqual(self.call('POST', self.path, self.body(None, phone=f'0912123456{index}'), cookie)[0], 201)
+        admin, csrf = self.staff()
+        slot = self.slot()
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            statuses = list(pool.map(lambda request_id: self.call('POST', '/api/admin/consultation-status', {'requestId': request_id, 'status': 'confirmed', 'slotId': slot, 'csrf': csrf}, admin)[0], (1, 2)))
+        self.assertEqual(sorted(statuses), [200, 422])
+        with server.connect() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM consultation_requests WHERE status='confirmed'").fetchone()[0], 1)
+            self.assertEqual(db.execute("SELECT count(*) FROM consultation_requests WHERE status='pending' AND slot_id IS NULL").fetchone()[0], 1)
+
+    def test_nullable_slot_migration_preserves_existing_booking(self):
+        cookie = self.assessment()
+        slot = self.slot()
+        self.assertEqual(self.call('POST', self.path, self.body(slot), cookie)[0], 201)
+        with server.connect() as db:
+            db.execute('CREATE TABLE consultation_requests_old (id INTEGER PRIMARY KEY, session_hash TEXT NOT NULL, name TEXT NOT NULL, phone TEXT NOT NULL, slot_id INTEGER NOT NULL REFERENCES consultation_slots(id), notes TEXT NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)')
+            db.execute('INSERT INTO consultation_requests_old SELECT * FROM consultation_requests')
+            db.execute('DROP TABLE consultation_requests')
+            db.execute('ALTER TABLE consultation_requests_old RENAME TO consultation_requests')
+        with server.connect() as db:
+            row = db.execute('SELECT * FROM consultation_requests').fetchone()
+            self.assertEqual(row['slot_id'], slot)
+            self.assertEqual(row['phone'], '09121234567')
+            self.assertFalse(next(row['notnull'] for row in db.execute('PRAGMA table_info(consultation_requests)') if row['name'] == 'slot_id'))
+            with self.assertRaises(sqlite3.IntegrityError):
+                db.execute('INSERT INTO consultation_requests SELECT id+1,session_hash,name,phone,slot_id,notes,status,created_at,updated_at FROM consultation_requests')
+        other = self.assessment()
+        self.assertEqual(self.call('POST', self.path, self.body(None, phone='09121234568'), other)[0], 201)
+
     def test_storage_failure_never_returns_success(self):
         cookie = self.assessment()
         with patch.object(server,'connect',side_effect=sqlite3.OperationalError('private details')):
