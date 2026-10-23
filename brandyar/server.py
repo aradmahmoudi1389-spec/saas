@@ -1,10 +1,12 @@
 import argparse
 import base64
+import datetime
 import getpass
 import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import sqlite3
 import struct
@@ -14,10 +16,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from ipaddress import ip_address
 from pathlib import Path
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo
 
 import brand_analysis
 
 ASSESSMENT_COOKIE_KEY = secrets.token_bytes(32)
+CONSULTATION_TIMEZONE = os.environ.get('BRANDYAR_TIMEZONE', 'Asia/Tehran')
+CONSULTATION_ADMIN_ROLES = {'owner', 'support'}
 
 ROOT = Path(__file__).resolve().parent
 DB = Path(os.environ.get('BRANDYAR_DB', str(ROOT / '.data' / 'brandyar.sqlite3')))
@@ -44,7 +49,16 @@ def connect():
         CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'فعال', plan TEXT NOT NULL DEFAULT 'رایگان', created INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS tickets (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), subject TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'باز', created INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY, staff_id INTEGER REFERENCES staff(id), action TEXT NOT NULL, result TEXT NOT NULL, at INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS consultation_slots (id INTEGER PRIMARY KEY, starts_at INTEGER NOT NULL, duration_minutes INTEGER NOT NULL, status TEXT NOT NULL, capacity INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS consultation_requests (id INTEGER PRIMARY KEY, session_hash TEXT NOT NULL, name TEXT NOT NULL, phone TEXT NOT NULL, slot_id INTEGER NOT NULL REFERENCES consultation_slots(id), notes TEXT NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+        CREATE UNIQUE INDEX IF NOT EXISTS consultation_active_session ON consultation_requests(session_hash) WHERE status IN ('pending','confirmed');
+        CREATE UNIQUE INDEX IF NOT EXISTS consultation_active_phone ON consultation_requests(phone) WHERE status IN ('pending','confirmed');
+        CREATE UNIQUE INDEX IF NOT EXISTS consultation_active_slot ON consultation_requests(slot_id) WHERE status IN ('pending','confirmed');
+        CREATE TABLE IF NOT EXISTS consultation_attempts (session_hash TEXT NOT NULL, at INTEGER NOT NULL);
+        CREATE INDEX IF NOT EXISTS consultation_attempts_lookup ON consultation_attempts(session_hash,at);
+        CREATE INDEX IF NOT EXISTS consultation_slots_lookup ON consultation_slots(status,starts_at);
         CREATE INDEX IF NOT EXISTS attempts_lookup ON attempts(source,account,at);
+        CREATE INDEX IF NOT EXISTS consultation_requests_lookup ON consultation_requests(status,created_at);
     ''')
     return db
 
@@ -175,6 +189,137 @@ class Handler(BaseHTTPRequestHandler):
         signature = hmac.new(ASSESSMENT_COOKIE_KEY, '.'.join(parts[:2]).encode(), hashlib.sha256).hexdigest()
         return value if hmac.compare_digest(signature, parts[2]) else None
 
+    def consultation_session_hash(self):
+        value = self.assessment_session()
+        return hashlib.sha256(value.encode()).hexdigest() if value else None
+
+    def consultation_slot(self, row):
+        return {'id': row['id'], 'startsAt': row['starts_at'], 'durationMinutes': row['duration_minutes'], 'timeZone': CONSULTATION_TIMEZONE}
+
+    def consultation_slots(self, db):
+        now = int(time.time())
+        rows = db.execute("SELECT id,starts_at,duration_minutes FROM consultation_slots WHERE status='open' AND starts_at>? ORDER BY starts_at LIMIT 100", (now,)).fetchall()
+        return [self.consultation_slot(row) for row in rows]
+
+    def consultation_status(self, db, session_hash):
+        row = db.execute("SELECT consultation_requests.status,consultation_requests.created_at,consultation_slots.starts_at,consultation_slots.duration_minutes FROM consultation_requests JOIN consultation_slots ON consultation_slots.id=consultation_requests.slot_id WHERE session_hash=? AND consultation_requests.status IN ('pending','confirmed','cancelled','completed') ORDER BY consultation_requests.id DESC LIMIT 1", (session_hash,)).fetchone()
+        if not row:
+            return None
+        labels = {'pending': 'در انتظار تأیید', 'confirmed': 'زمان تأیید شد', 'cancelled': 'لغو شد', 'completed': 'انجام شد'}
+        return {'status': labels[row['status']], 'state': row['status'], 'startsAt': row['starts_at'], 'timeZone': CONSULTATION_TIMEZONE}
+
+    def consultation_phone(self, value):
+        if not isinstance(value, str) or len(value) > 32:
+            raise ValueError('شمارهٔ موبایل را کامل وارد کن.')
+        digits = value.strip().replace(' ', '').replace('-', '')
+        translation = str.maketrans('۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩', '01234567890123456789')
+        digits = digits.translate(translation)
+        if digits.startswith('+98'): digits = '0' + digits[3:]
+        elif digits.startswith('98'): digits = '0' + digits[2:]
+        if not re.fullmatch(r'09[0-9]{9}', digits):
+            raise ValueError('شمارهٔ موبایل را کامل وارد کن.')
+        return digits
+
+    def consultation_ready(self, db, session_hash):
+        if not session_hash or not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='assessment_jobs'").fetchone():
+            return False
+        rows = db.execute("SELECT report FROM assessment_jobs WHERE session_hash=? AND state='ready' AND created>?", (session_hash, int(time.time()) - 3600)).fetchall()
+        for row in rows:
+            try:
+                brand_analysis.validate_report(brand_analysis.parse_json(row['report']))
+                return True
+            except (ValueError, TypeError, KeyError):
+                continue
+        return False
+
+    def consultation_dispatch(self, write=False):
+        try:
+            return self.consultation_request() if write else self.consultation_public()
+        except (sqlite3.Error, OSError):
+            return self.json(503, {'error': 'ذخیره‌سازی موقتاً در دسترس نیست. درخواست ثبت نشد؛ لطفاً دوباره تلاش کن.' if write else 'دریافت اطلاعات موقتاً ممکن نیست. لطفاً دوباره تلاش کن.'})
+
+    def consultation_public(self):
+        if not self.assessment_https():
+            return self.json(503, {'error': 'اتصال امن سایت در دسترس نیست.'})
+        session_hash = self.consultation_session_hash()
+        if not session_hash:
+            return self.json(401, {'error': 'گزارش معتبر این نشست پیدا نشد.'})
+        with connect() as db:
+            if not self.consultation_ready(db, session_hash):
+                return self.json(403, {'error': 'این بخش پس از آماده‌شدن گزارش در دسترس است.'})
+            return self.json(200, {'slots': self.consultation_slots(db), 'request': self.consultation_status(db, session_hash), 'timeZoneLabel': 'تهران' if CONSULTATION_TIMEZONE == 'Asia/Tehran' else CONSULTATION_TIMEZONE})
+
+    def consultation_request(self):
+        if not self.assessment_https() or not self.safe_origin():
+            return self.json(403, {'error': 'این درخواست مجاز نیست.'})
+        session_hash = self.consultation_session_hash()
+        if not session_hash:
+            return self.json(401, {'error': 'گزارش معتبر این نشست پیدا نشد.'})
+        with connect() as db:
+            if not self.consultation_ready(db, session_hash):
+                return self.json(403, {'error': 'این بخش پس از آماده‌شدن گزارش در دسترس است.'})
+            db.execute('BEGIN IMMEDIATE')
+            now = int(time.time())
+            db.execute('DELETE FROM consultation_attempts WHERE at<?', (now - 900,))
+            if db.execute('SELECT count(*) FROM consultation_attempts WHERE session_hash=? AND at>?', (session_hash, now - 900)).fetchone()[0] >= 5:
+                db.rollback()
+                return self.json(429, {'error': 'تعداد تلاش‌ها زیاد است. لطفاً کمی بعد دوباره تلاش کن.'})
+            db.execute('INSERT INTO consultation_attempts VALUES(?,?)', (session_hash, now))
+            db.commit()
+        try:
+            data = self.request_data(4096, brand_analysis.parse_json)
+            if set(data) != {'name', 'phone', 'slotId', 'notes'} or not isinstance(data['name'], str) or not isinstance(data['notes'], str) or type(data['slotId']) is not int:
+                raise ValueError('اطلاعات فرم کامل یا معتبر نیست.')
+            name, notes = data['name'].strip(), data['notes'].strip()
+            phone, slot_id = self.consultation_phone(data['phone']), data['slotId']
+            if len(name) > 120:
+                raise ValueError('نام باید حداکثر ۱۲۰ نویسه باشد.')
+            if len(data['notes']) > 200:
+                raise ValueError('توضیح باید حداکثر ۲۰۰ نویسه باشد.')
+        except (ValueError, TypeError, UnicodeError, RecursionError) as error:
+            message = str(error)
+            allowed = {'شمارهٔ موبایل را کامل وارد کن.', 'نام باید حداکثر ۱۲۰ نویسه باشد.', 'توضیح باید حداکثر ۲۰۰ نویسه باشد.'}
+            return self.json(422, {'error': message if message in allowed else 'اطلاعات فرم کامل یا معتبر نیست.'})
+        with connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            try:
+                if not self.consultation_ready(db, session_hash):
+                    return self.json(403, {'error': 'این بخش پس از آماده‌شدن گزارش در دسترس است.'})
+                active = db.execute("SELECT 1 FROM consultation_requests WHERE session_hash=? AND status IN ('pending','confirmed')", (session_hash,)).fetchone()
+                if active:
+                    return self.json(409, {'error': 'یک درخواست فعال برای این نشست وجود دارد.'})
+                slot = db.execute("SELECT * FROM consultation_slots WHERE id=? AND status='open' AND starts_at>?", (slot_id, int(time.time()))).fetchone()
+                if not slot:
+                    return self.json(409, {'error': 'این زمان دیگر در دسترس نیست. زمان دیگری را انتخاب کن.'})
+                occupied = db.execute("SELECT count(*) FROM consultation_requests WHERE slot_id=? AND status IN ('pending','confirmed')", (slot_id,)).fetchone()[0]
+                if occupied >= slot['capacity']:
+                    return self.json(409, {'error': 'این زمان دیگر در دسترس نیست. زمان دیگری را انتخاب کن.'})
+                now = int(time.time())
+                db.execute("INSERT INTO consultation_requests(session_hash,name,phone,slot_id,notes,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)", (session_hash, name, phone, slot_id, notes, 'pending', now, now))
+                db.execute("UPDATE consultation_slots SET status='requested' WHERE id=? AND status='open'", (slot_id,))
+                state = self.consultation_status(db, session_hash)
+                db.commit()
+            except sqlite3.IntegrityError:
+                db.rollback()
+                return self.json(409, {'error': 'درخواست مشابهی در حال بررسی است. اگر لازم است، بعداً دوباره تلاش کن.'})
+            except Exception:
+                db.rollback()
+                raise
+        return self.json(201, {'message': 'درخواستت ثبت شد. بعد از تأیید زمان، برای هماهنگی با تو تماس می‌گیریم.', 'request': state})
+
+    def admin_consultation(self, db, staff):
+        if staff['role'] not in CONSULTATION_ADMIN_ROLES or not self.assessment_https():
+            return self.json(403, {'error': 'این بخش برای نقش شما مجاز نیست یا اتصال امن برقرار نیست.'})
+        if self.path == '/api/admin/consultations':
+            rows = db.execute("SELECT r.id,r.name,r.phone,r.notes,r.status,r.created_at,s.starts_at,s.duration_minutes FROM consultation_requests r JOIN consultation_slots s ON s.id=r.slot_id ORDER BY r.id DESC LIMIT 200").fetchall()
+            return self.json(200, {'requests': [dict(row) for row in rows]})
+        if self.path == '/api/admin/consultation-slots':
+            return self.json(200, {'slots': [dict(row) for row in db.execute('SELECT id,starts_at,duration_minutes,status,capacity FROM consultation_slots ORDER BY starts_at DESC LIMIT 200')], 'timeZone': CONSULTATION_TIMEZONE})
+        return self.json(404, {'error': 'Not found'})
+
+    def audit_consultation(self, db, staff, action, result):
+        db.execute('INSERT INTO audit(staff_id,action,result,at) VALUES(?,?,?,?)', (staff['staff_id'], action, result, int(time.time())))
+
     def assessment_status(self):
         if not self.assessment_https():
             return self.json(200, {'ready': False, 'error': 'ارسال تحلیل تا فعال‌شدن اتصال امن سایت در دسترس نیست. پاسخ‌های شما حفظ می‌شوند.'})
@@ -214,6 +359,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == '/api/assessment/status':
             return self.assessment_status()
+        if path == '/api/assessment/consultation':
+            return self.consultation_dispatch()
         public = {'/', '/index.html', '/styles.css', '/typography.css', '/app.js', '/logo.jpg'}
         is_font = path.startswith('/fonts/') and path.endswith('.woff2') and '..' not in path
         with connect() as db:
@@ -223,6 +370,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.json(401, {'error': 'Unauthorized'})
                 if path == '/api/admin/me':
                     return self.json(200, {'principal': {'role': staff['role'], 'displayName': staff['name']}, 'csrf': staff['csrf']})
+                if path == '/api/admin/consultations' or path == '/api/admin/consultation-slots':
+                    return self.admin_consultation(db, staff)
                 if path == '/api/admin/data':
                     permitted = SECTIONS[staff['role']]
                     data = {key: [] for key in permitted if key != 'summary'}
@@ -250,6 +399,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == '/api/assessment/analyze':
             return self.assessment_analyze()
+        if path == '/api/assessment/consultation':
+            return self.consultation_dispatch(write=True)
         if not self.safe_origin():
             return self.json(403, {'error': 'Forbidden'})
         try:
@@ -258,6 +409,67 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(422, {'error': 'Invalid input'})
         with connect() as db:
             source = self.client_address[0]
+            if path.startswith('/api/admin/consultation'):
+                staff = self.session(db)
+                if not self.assessment_https() or not staff or staff['role'] not in CONSULTATION_ADMIN_ROLES or not hmac.compare_digest(str(data.get('csrf', '')), staff['csrf']):
+                    return self.json(403, {'error': 'این درخواست مجاز نیست.'})
+                try:
+                    if path == '/api/admin/consultation-slots':
+                        date, clock = str(data.get('date', '')).strip(), str(data.get('time', '')).strip()
+                        duration = data.get('durationMinutes')
+                        if not re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', date) or not re.fullmatch(r'[0-9]{2}:[0-9]{2}', clock) or type(duration) is not int or not 15 <= duration <= 240: raise ValueError
+                        local = datetime.datetime.strptime(f'{date} {clock}', '%Y-%m-%d %H:%M').replace(tzinfo=ZoneInfo(CONSULTATION_TIMEZONE))
+                        starts_at = int(local.timestamp())
+                        if starts_at <= int(time.time()): raise ValueError
+                        db.execute('BEGIN IMMEDIATE')
+                        overlap = db.execute("SELECT 1 FROM consultation_slots WHERE status<>'cancelled' AND starts_at<? AND starts_at+duration_minutes*60>? LIMIT 1", (starts_at + duration * 60, starts_at)).fetchone()
+                        if overlap: raise ValueError
+                        db.execute('INSERT INTO consultation_slots(starts_at,duration_minutes,status,capacity,created_at) VALUES(?,?,?,?,?)', (starts_at,duration,'open',1,int(time.time())))
+                        self.audit_consultation(db, staff, f'consultation_slot_create:{db.execute("SELECT last_insert_rowid()").fetchone()[0]}', 'success')
+                        db.commit()
+                        return self.json(201, {'status': 'created'})
+                    if path == '/api/admin/consultation-slot-status':
+                        slot_id, status = int(data.get('slotId')), str(data.get('status'))
+                        if type(data.get('slotId')) is not int or status not in {'open', 'blocked', 'cancelled'}: raise ValueError
+                        db.execute('BEGIN IMMEDIATE')
+                        slot = db.execute('SELECT * FROM consultation_slots WHERE id=?', (slot_id,)).fetchone()
+                        transitions = {'open': {'blocked','cancelled'}, 'blocked': {'open','cancelled'}, 'cancelled': {'open'}}
+                        if not slot or slot['starts_at'] <= int(time.time()) or status not in transitions.get(slot['status'], set()): raise ValueError
+                        if status == 'open':
+                            overlaps = db.execute("SELECT 1 FROM consultation_slots WHERE id<>? AND status<>'cancelled' AND starts_at<? AND starts_at+duration_minutes*60>? LIMIT 1", (slot_id, slot['starts_at'] + slot['duration_minutes'] * 60, slot['starts_at'])).fetchone()
+                            if overlaps: raise ValueError
+                        db.execute('UPDATE consultation_slots SET status=? WHERE id=?', (status, slot_id))
+                        self.audit_consultation(db, staff, f'consultation_slot_status:{slot_id}', status)
+                        db.commit()
+                        return self.json(200, {'status': 'updated'})
+                    if path == '/api/admin/consultation-status':
+                        request_id, status = int(data.get('requestId')), str(data.get('status'))
+                        if type(data.get('requestId')) is not int or status not in {'confirmed', 'cancelled', 'completed'}: raise ValueError
+                        db.execute('BEGIN IMMEDIATE')
+                        request = db.execute('SELECT * FROM consultation_requests WHERE id=?', (request_id,)).fetchone()
+                        if not request:
+                            db.rollback()
+                            return self.json(404, {'error': 'درخواست پیدا نشد.'})
+                        transitions = {'pending': {'confirmed','cancelled'}, 'confirmed': {'cancelled','completed'}, 'cancelled': set(), 'completed': set()}
+                        if status not in transitions[request['status']]: raise ValueError
+                        slot = db.execute('SELECT * FROM consultation_slots WHERE id=?', (request['slot_id'],)).fetchone()
+                        if status == 'confirmed':
+                            if not slot or slot['starts_at'] <= int(time.time()) or slot['status'] != 'requested': raise ValueError
+                            overlaps = db.execute("SELECT 1 FROM consultation_requests r JOIN consultation_slots s ON s.id=r.slot_id WHERE r.status='confirmed' AND r.id<>? AND s.starts_at<? AND s.starts_at+s.duration_minutes*60>? LIMIT 1", (request_id, slot['starts_at'] + slot['duration_minutes'] * 60, slot['starts_at'])).fetchone()
+                            if overlaps: raise ValueError
+                            db.execute("UPDATE consultation_slots SET status='confirmed' WHERE id=?", (request['slot_id'],))
+                        elif status == 'cancelled':
+                            db.execute("UPDATE consultation_slots SET status='cancelled' WHERE id=?", (request['slot_id'],))
+                        elif slot['starts_at'] + slot['duration_minutes'] * 60 > int(time.time()):
+                            raise ValueError
+                        db.execute('UPDATE consultation_requests SET status=?,updated_at=? WHERE id=?', (status, int(time.time()), request_id))
+                        self.audit_consultation(db, staff, f'consultation_status:{request_id}', status)
+                        db.commit()
+                        return self.json(200, {'status': 'updated'})
+                except (ValueError, TypeError, sqlite3.Error):
+                    db.rollback()
+                    return self.json(422, {'error': 'تغییر درخواستی معتبر نیست یا با وضعیت فعلی سازگار نیست.'})
+                return self.json(404, {'error': 'Not found'})
             if path == '/api/auth/login':
                 email = str(data.get('email', '')).strip().lower()[:254]
                 password = str(data.get('password', ''))

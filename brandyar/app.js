@@ -219,6 +219,11 @@ let assessmentStep = 0;
 let assessmentPending = false;
 let assessmentError = '';
 let assessmentRequestId = 0;
+let assessmentConsultation = null;
+let assessmentConsultationLoading = false;
+let assessmentConsultationError = '';
+let consultationSubmitting = false;
+let consultationBookingOpen = false;
 const assessmentStorageKey = 'brandyar-assessment-session-v1';
 function validBrandReport(value) {
   const text = value => typeof value === 'string' && value.length > 0 && value.length <= 600;
@@ -277,22 +282,114 @@ function assessmentFlow(){const noSale=Array.isArray(assessmentAnswers.q11)&&!of
 function assessmentStepMarkup(){const flow=assessmentFlow(),question=flow[assessmentStep]||flow[flow.length-1],saved=assessmentAnswers[question.id],count=flow.length;return `<div class="assessment-progress"><span>${question.section} · سؤال ${assessmentStep+1} از ${count}</span><progress max="${count}" value="${assessmentStep+1}">${assessmentStep+1} از ${count}</progress></div><form id="assessment-step-form" class="panel assessment-question"><h2 id="assessment-label">${question.title}</h2>${question.hint?`<p>${question.hint}</p>`:''}${question.type==='text'||question.type==='textarea'?`<label class="sr-only" for="assessment-answer">${question.title}</label>${question.type==='textarea'?`<textarea id="assessment-answer" name="answer" rows="4" maxlength="500" ${question.optional?'':'required'}>${esc(typeof saved==='string'?saved:'')}</textarea>`:`<input id="assessment-answer" name="answer" type="text" maxlength="160" value="${esc(typeof saved==='string'&&saved!==question.skip?saved:'')}" ${question.optional||saved===question.skip?'':'required'}>`}${question.skip?`<label class="check-control"><input type="checkbox" name="skip" ${saved===question.skip?'checked':''}> ${question.skip}</label>`:''}`:`<div class="assessment-choices" role="group" aria-labelledby="assessment-label">${question.options.map((option,index)=>`<label><input type="${question.type==='multi'?'checkbox':'radio'}" name="answer" value="${index}" ${question.type==='multi'?(Array.isArray(saved)&&saved.includes(option)?'checked':''):(saved===option?'checked':'')}> ${option}</label>`).join('')}</div>${question.extra?`<label class="field" for="assessment-extra">${question.extra}<input id="assessment-extra" name="extra" maxlength="120" value="${esc(assessmentAnswers.q2extra||'')}"></label>`:''}`}${question.optional?'<p>این سؤال اختیاری است؛ می‌توانی بدون انتخاب ادامه بدهی.</p>':''}${assessmentStep===count-1?'<p class="assessment-processing-note">پاسخ‌های شما برای آماده‌سازی گزارش برند پردازش می‌شوند. این تحلیل بر اساس اطلاعاتی است که خودتان وارد کرده‌اید.</p><p class="hint">برای حفظ حریم خصوصی، فقط گزینه‌های انتخابی به متیس فرستاده می‌شوند؛ متن آزاد، بیو و اطلاعات تماس به این سرویس ارسال نمی‌شوند. پاسخ‌ها و گزارش برای بازیابی پس از تازه‌سازی در نشست همین مرورگر نگهداری می‌شوند. <a href="#/privacy">حریم خصوصی</a></p><label class="check-control"><input type="checkbox" name="analysis-consent" required> با پردازش گزینه‌های انتخابی برای تولید گزارش موافقم.</label>':''}<div class="form-feedback" id="assessment-feedback" role="status" aria-live="polite"></div><div class="card-actions">${assessmentStep?'<button class="btn btn-outline" type="button" id="assessment-prev">سؤال قبل</button>':''}<button class="btn btn-accent" type="submit">${assessmentStep===count-1?'دیدن گزارش':'سؤال بعد'} ${icon('arrow')}</button></div></form>`}
 function updateAssessment(){const stage=document.getElementById('assessment-stage');if(stage){stage.innerHTML=assessmentStepMarkup();stage.querySelector('input:not([type=checkbox]):not([type=radio]),textarea,input[type=radio]:checked,input[type=checkbox]:checked')?.focus()}}
 function assessmentPage(){return `${pageHero('ارزیابی رایگان پیج','چند سؤال ساده، یک قدم روشن‌تر','چند سؤال ساده دربارهٔ پیج و کارهایی که این روزها انجام می‌دهی می‌پرسیم. جواب درست و غلط وجود ندارد؛ اگر کاری را هنوز انجام نداده‌ای، همان جواب به ما کمک می‌کند قدم بعدی مناسب‌تری پیشنهاد بدهیم. این نتیجهٔ اولیه فقط بر اساس پاسخ‌های تو ساخته می‌شود و پیجت به‌صورت خودکار بررسی نمی‌شود.')}<section class="section"><div class="container assessment-layout"><div class="notice">حدود ۵ تا ۷ دقیقه · بدون ثبت‌نام یا اتصال به اینستاگرام · تحلیل با رضایت شما و پس از فعال‌سازی سرویس انجام می‌شود؛ پیش از ارسال، شیوهٔ پردازش را می‌بینی.</div><div id="assessment-stage">${assessmentStepMarkup()}</div></div></section>`}
+function consultationDate(value) {
+  return new Intl.DateTimeFormat('fa-IR-u-ca-persian', {dateStyle:'full', timeStyle:'short', timeZone:value.timeZone}).format(new Date(value.startsAt * 1000));
+}
+function consultationSlotsMarkup() {
+  return assessmentConsultation.slots.map(slot => {
+    const expired = slot.startsAt * 1000 <= Date.now();
+    return `<label><input type="radio" name="slotId" value="${slot.id}" required ${expired?'disabled':''}><span>${esc(consultationDate(slot))} · ${new Intl.NumberFormat('fa-IR').format(slot.durationMinutes)} دقیقه${expired?' (غیرقابل‌انتخاب)':''}</span></label>`;
+  }).join('');
+}
+function updateConsultation() {
+  const host = document.getElementById('report-consultation');
+  if (!host || !validBrandReport(assessmentResult)) return;
+  host.innerHTML = consultationMarkup();
+  const card = host.querySelector('.panel');
+  card?.classList.add('motion-item');
+  requestAnimationFrame(() => card?.classList.add('is-visible'));
+  host.querySelector('h2')?.focus({preventScroll:true});
+}
+async function loadConsultation(preserveForm = false) {
+  if (assessmentConsultationLoading || consultationSubmitting || !validBrandReport(assessmentResult)) return;
+  assessmentConsultationLoading = true;
+  assessmentConsultationError = '';
+  if (!preserveForm) updateConsultation();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch('/api/assessment/consultation', {credentials:'same-origin', cache:'no-store', signal:controller.signal});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'زمان‌های مشاوره در دسترس نیستند.');
+    assessmentConsultation = data;
+    if (preserveForm && !['pending','confirmed'].includes(data.request?.state)) {
+      const choices = document.querySelector('#consultation-form .consultation-slots');
+      if (choices) choices.innerHTML = '<legend>زمان درخواستی</legend>' + consultationSlotsMarkup();
+      return;
+    }
+    consultationBookingOpen = false;
+  } catch (error) {
+    assessmentConsultationError = ['TypeError','SyntaxError','AbortError'].includes(error.name) ? 'دریافت زمان‌ها انجام نشد. لطفاً دوباره تلاش کن.' : error.message;
+    if (preserveForm) {
+      const feedback = document.getElementById('consultation-feedback');
+      if (feedback) feedback.textContent = assessmentConsultationError;
+      return;
+    }
+  } finally {
+    clearTimeout(timer);
+    assessmentConsultationLoading = false;
+    if (!preserveForm || ['pending','confirmed'].includes(assessmentConsultation?.request?.state)) updateConsultation();
+  }
+}
+function consultationMarkup() {
+  const heading = '<h2 tabindex="-1">دربارهٔ گزارش برندت با هم صحبت کنیم</h2>';
+  if (!assessmentConsultation && !assessmentConsultationLoading && !assessmentConsultationError) return `<article class="panel consultation-invite">${heading}<p>اگر می‌خواهی مسیر رشدت را دقیق‌تر بررسی کنیم، شماره‌ات را بگذار و زمان مناسب برای مشاوره را انتخاب کن. پس از تأیید زمان، هماهنگی نهایی انجام می‌شود.</p><button class="btn btn-outline" type="button" id="consultation-open">درخواست مشاوره</button><p class="hint">اگر قبلاً درخواستی ثبت کرده‌ای، وضعیت آن را از همین دکمه ببین.</p></article>`;
+  if (assessmentConsultationLoading) return `<article class="panel consultation-invite" aria-busy="true">${heading}<p role="status">در حال دریافت زمان‌های آزاد…</p></article>`;
+  if (assessmentConsultationError) return `<article class="panel consultation-invite">${heading}<p class="error" role="alert">${esc(assessmentConsultationError)}</p><button class="btn btn-outline" type="button" id="consultation-open">تلاش دوباره</button></article>`;
+  if (assessmentConsultation.request && !consultationBookingOpen) {
+    const request = assessmentConsultation.request;
+    return `<article class="panel consultation-invite"><h2 tabindex="-1">وضعیت درخواست مشاوره</h2><p role="status">${esc(request.status)} · ${esc(consultationDate(request))}</p>${request.state==='pending'?'<p>درخواستت ثبت شد. بعد از تأیید زمان، برای هماهنگی با تو تماس می‌گیریم. این زمان هنوز قطعی نیست.</p>':''}<p class="hint">شمارهٔ تماس فقط برای هماهنگی مشاوره استفاده می‌شود.</p><div class="card-actions"><button class="btn btn-outline" type="button" id="consultation-open">به‌روزرسانی وضعیت</button>${['cancelled','completed'].includes(request.state)?'<button class="btn btn-outline" type="button" id="consultation-new">درخواست جدید</button>':''}</div></article>`;
+  }
+  if (!assessmentConsultation.slots.length) return `<article class="panel consultation-invite">${heading}<p>فعلاً زمان آزادی برای انتخاب وجود ندارد. هیچ زمانی ثبت نشده است.</p><button class="btn btn-outline" type="button" id="consultation-open">بررسی زمان‌های جدید</button></article>`;
+  return `<article class="panel consultation-invite">${heading}<p>زمان‌ها به وقت ${esc(assessmentConsultation.timeZoneLabel)} هستند؛ ثبت درخواست به معنی تأیید نهایی زمان نیست.</p><form id="consultation-form"><div class="field"><label for="consultation-name">نام (اختیاری)</label><input id="consultation-name" name="name" maxlength="120" autocomplete="name"></div><div class="field"><label for="consultation-phone">شمارهٔ موبایل</label><input id="consultation-phone" name="phone" type="tel" inputmode="tel" maxlength="32" autocomplete="tel" dir="ltr" required aria-describedby="consultation-privacy"></div><fieldset class="consultation-slots"><legend>زمان درخواستی</legend>${consultationSlotsMarkup()}</fieldset><button class="btn btn-outline" id="consultation-refresh-slots" type="button">به‌روزرسانی زمان‌ها</button><div class="field"><label for="consultation-notes">توضیح کوتاه (اختیاری؛ حداکثر ۲۰۰ نویسه)</label><textarea id="consultation-notes" name="notes" maxlength="200" rows="3"></textarea></div><p class="hint" id="consultation-privacy">شمارهٔ تماس فقط برای هماهنگی مشاوره در سرور ذخیره می‌شود و به هوش مصنوعی یا سرویس تحلیلی ارسال نمی‌شود. <a href="#/privacy">حریم خصوصی</a></p><div class="form-feedback" id="consultation-feedback" role="status" aria-live="polite"></div><div class="card-actions"><button class="btn btn-outline" type="submit" ${consultationSubmitting?'disabled':''}>ثبت درخواست</button></div></form></article>`;
+}
+async function submitConsultation(form) {
+  if (consultationSubmitting) return;
+  consultationSubmitting = true;
+  const button = form.querySelector('[type="submit"]');
+  const feedback = form.querySelector('#consultation-feedback');
+  button.disabled = true;
+  form.setAttribute('aria-busy','true');
+  feedback.textContent = 'در حال ثبت درخواست…';
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const values = new FormData(form);
+    const response = await fetch('/api/assessment/consultation', {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, signal:controller.signal, body:JSON.stringify({name:String(values.get('name')||''), phone:String(values.get('phone')||''), slotId:Number(values.get('slotId')), notes:String(values.get('notes')||'')})});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'ثبت درخواست انجام نشد.');
+    assessmentConsultation = {request:data.request, slots:[]};
+    assessmentConsultationError = '';
+    consultationBookingOpen = false;
+    updateConsultation();
+  } catch (error) {
+    feedback.textContent = ['TypeError','SyntaxError','AbortError'].includes(error.name) ? 'پاسخ ثبت دریافت نشد. برای بررسی وضعیت، زمان‌ها را به‌روزرسانی کن یا دوباره تلاش کن.' : error.message;
+  } finally {
+    clearTimeout(timer);
+    consultationSubmitting = false;
+    button.disabled = false;
+    form.setAttribute('aria-busy','false');
+  }
+}
 function reportPage() {
   const introduction = pageHero('گزارش ارزیابی برند','تصویر روشن‌تری از مسیر برندت','این گزارش فقط بر پایهٔ گزینه‌های انتخابی توست؛ پیج، آمار یا پست‌ها بررسی نمی‌شوند.');
   const actions = `<div class="card-actions"><a href="#/assessment" class="btn btn-outline" id="assessment-edit">اصلاح پاسخ‌ها</a><button class="btn btn-outline" type="button" id="assessment-clear">پاک‌کردن پاسخ‌ها</button></div>`;
   if (assessmentPending) return `${introduction}<section class="section"><div class="container assessment-layout"><article class="panel" aria-busy="true"><p role="status" aria-live="polite">در حال آماده‌سازی تحلیل برند شما…</p><div class="skeleton" aria-hidden="true"></div><div class="skeleton short" aria-hidden="true"></div><button class="btn btn-dark" type="button" disabled>در حال پردازش…</button></article></div></section>`;
-  if (!assessmentResult) return `${introduction}<section class="section"><div class="container assessment-layout"><div class="notice" role="status" aria-live="polite">${esc(assessmentError || (Object.keys(assessmentAnswers).length ? 'پاسخ‌های شما بازیابی شد. درخواست جدیدی به‌صورت خودکار ارسال نمی‌شود؛ فرم را مرور کن یا دوباره تلاش کن.' : 'هنوز ارزیابی انجام نداده‌ای. برای دریافت گزارش، ارزیابی را شروع کن.'))}</div>${Object.keys(assessmentAnswers).length?`<button class="btn btn-dark" type="button" id="assessment-retry">تلاش دوباره</button>${actions}`:'<a class="btn btn-dark" href="#/assessment">شروع ارزیابی رایگان</a>'}</div></section>`;
+  if (!validBrandReport(assessmentResult)) return `${introduction}<section class="section"><div class="container assessment-layout"><div class="notice" role="status" aria-live="polite">${esc(assessmentError || (Object.keys(assessmentAnswers).length ? 'پاسخ‌های شما بازیابی شد. درخواست جدیدی به‌صورت خودکار ارسال نمی‌شود؛ فرم را مرور کن یا دوباره تلاش کن.' : 'هنوز ارزیابی انجام نداده‌ای. برای دریافت گزارش، ارزیابی را شروع کن.'))}</div>${Object.keys(assessmentAnswers).length?`<button class="btn btn-dark" type="button" id="assessment-retry">تلاش دوباره</button>${actions}`:'<a class="btn btn-dark" href="#/assessment">شروع ارزیابی رایگان</a>'}</div></section>`;
   const report = assessmentResult;
   const list = items => `<ul class="report-list">${items.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>`;
-  return `${introduction}<section class="section"><div class="container assessment-layout report-layout"><article class="panel"><h2>تصویر کلی</h2><p>${esc(report.summary)}</p></article>${[['positioning','جایگاه تخصصی'],['content','کیفیت محتوا'],['trust','اعتمادسازی']].map(([key,title])=>`<article class="panel"><h2>${title}</h2><strong>${esc(report[key].status)}</strong><p>${esc(report[key].insight)}</p></article>`).join('')}<article class="panel"><h2>نقاط قوت</h2>${list(report.strengths)}</article><article class="panel"><h2>فرصت‌های رشد</h2>${list(report.growth_opportunities)}</article><article class="panel" id="report-steps"><h2>سه اقدام اولویت‌دار</h2><ol class="report-list report-priorities">${report.priority_actions.map(item=>`<li><h3>${esc(item.title)}</h3><p>${esc(item.description)}</p><p class="hint">چرا مهم است؟ ${esc(item.why_it_matters)}</p></li>`).join('')}</ol></article><article class="panel"><h2>قدم این هفته</h2><h3>${esc(report.this_week_action.title)}</h3><p>${esc(report.this_week_action.description)}</p></article>${report.questions_to_refine.length?`<article class="panel"><h2>پرسش‌های تکمیلی</h2>${list(report.questions_to_refine)}</article>`:''}<p class="report-disclaimer">${esc(report.disclaimer)}</p><div class="card-actions"><button class="btn btn-outline" type="button" id="assessment-download">ذخیرهٔ گزارش</button></div>${actions}</div></section>`;
+  return `${introduction}<section class="section"><div class="container assessment-layout report-layout"><article class="panel"><h2>تصویر کلی</h2><p>${esc(report.summary)}</p></article>${[['positioning','جایگاه تخصصی'],['content','کیفیت محتوا'],['trust','اعتمادسازی']].map(([key,title])=>`<article class="panel"><h2>${title}</h2><strong>${esc(report[key].status)}</strong><p>${esc(report[key].insight)}</p></article>`).join('')}<article class="panel"><h2>نقاط قوت</h2>${list(report.strengths)}</article><article class="panel"><h2>فرصت‌های رشد</h2>${list(report.growth_opportunities)}</article><article class="panel" id="report-steps"><h2>سه اقدام اولویت‌دار</h2><ol class="report-list report-priorities">${report.priority_actions.map(item=>`<li><h3>${esc(item.title)}</h3><p>${esc(item.description)}</p><p class="hint">چرا مهم است؟ ${esc(item.why_it_matters)}</p></li>`).join('')}</ol></article><article class="panel"><h2>قدم این هفته</h2><h3>${esc(report.this_week_action.title)}</h3><p>${esc(report.this_week_action.description)}</p></article>${report.questions_to_refine.length?`<article class="panel"><h2>پرسش‌های تکمیلی</h2>${list(report.questions_to_refine)}</article>`:''}<p class="report-disclaimer">${esc(report.disclaimer)}</p><div id="report-consultation">${consultationMarkup()}</div><div class="card-actions"><button class="btn btn-outline" type="button" id="assessment-download">ذخیرهٔ گزارش</button></div>${actions}</div></section>`;
 }
 pages.assessment=assessmentPage;
 pages.report=reportPage;
 appPages.assistant=()=>`${appTitle('دستیار برند','راهنمای ساختاری برای قدم‌های بعدی برند آموزشی شما.') }<div class="panel"><h2>دستیار هوشمند هنوز متصل نیست</h2><p>در این نسخه هیچ مدل هوش مصنوعی به گفت‌وگوها یا اطلاعات پیج متصل نشده است. برای شروع می‌توانید ارزیابی خوداظهاری را انجام دهید و از گزارش و نقشه راه نمونه استفاده کنید.</p><a class="btn btn-dark" href="#/assessment">شروع ارزیابی رایگان</a></div>`;
-document.addEventListener('submit',event=>{if(event.target.id!=='assessment-step-form')return;event.preventDefault();if(assessmentPending)return;const question=assessmentFlow()[assessmentStep],form=event.target,values=new FormData(form);let answer;if(question.type==='multi'){answer=values.getAll('answer').map(v=>question.options[Number(v)]);if(!answer.length||question.max&&answer.length>question.max){form.querySelector('#assessment-feedback').textContent=question.max?`حداکثر ${question.max} گزینه انتخاب کن.`:'یک گزینه انتخاب کن یا «هیچ‌کدام» را بزن.';return}}else if(question.type==='text'||question.type==='textarea'){answer=question.skip&&values.has('skip')?question.skip:String(values.get('answer')||'').trim();if(!answer&&!question.optional){form.querySelector('#assessment-feedback').textContent='می‌توانی یک پاسخ کوتاه بنویسی یا گزینهٔ کمکی را انتخاب کنی.';return}}else{answer=values.has('answer')?question.options[Number(values.get('answer'))]:'';if(!answer&&!question.optional){form.querySelector('#assessment-feedback').textContent='یک گزینه انتخاب کن تا ادامه بدهیم.';return}}assessmentAnswers[question.id]=answer||'';if(question.extra)assessmentAnswers.q2extra=String(values.get('extra')||'').trim();if(question.id==='q11'){if(!offersService(assessmentAnswers))for(const id of ['q12','q13','q14'])delete assessmentAnswers[id];else delete assessmentAnswers.q12a}if(assessmentStep===assessmentFlow().length-1){if(!values.has('analysis-consent')){form.querySelector('#assessment-feedback').textContent='برای آماده‌سازی گزارش، رضایت به پردازش گزینه‌ها لازم است.';return}submitBrandAnalysis();return}assessmentStep++;updateAssessment()});
+document.addEventListener('submit',event=>{if(event.target.id==='consultation-form'){event.preventDefault();submitConsultation(event.target);return}if(event.target.id!=='assessment-step-form')return;event.preventDefault();if(assessmentPending)return;const question=assessmentFlow()[assessmentStep],form=event.target,values=new FormData(form);let answer;if(question.type==='multi'){answer=values.getAll('answer').map(v=>question.options[Number(v)]);if(!answer.length||question.max&&answer.length>question.max){form.querySelector('#assessment-feedback').textContent=question.max?`حداکثر ${question.max} گزینه انتخاب کن.`:'یک گزینه انتخاب کن یا «هیچ‌کدام» را بزن.';return}}else if(question.type==='text'||question.type==='textarea'){answer=question.skip&&values.has('skip')?question.skip:String(values.get('answer')||'').trim();if(!answer&&!question.optional){form.querySelector('#assessment-feedback').textContent='می‌توانی یک پاسخ کوتاه بنویسی یا گزینهٔ کمکی را انتخاب کنی.';return}}else{answer=values.has('answer')?question.options[Number(values.get('answer'))]:'';if(!answer&&!question.optional){form.querySelector('#assessment-feedback').textContent='یک گزینه انتخاب کن تا ادامه بدهیم.';return}}assessmentAnswers[question.id]=answer||'';if(question.extra)assessmentAnswers.q2extra=String(values.get('extra')||'').trim();if(question.id==='q11'){if(!offersService(assessmentAnswers))for(const id of ['q12','q13','q14'])delete assessmentAnswers[id];else delete assessmentAnswers.q12a}if(assessmentStep===assessmentFlow().length-1){if(!values.has('analysis-consent')){form.querySelector('#assessment-feedback').textContent='برای آماده‌سازی گزارش، رضایت به پردازش گزینه‌ها لازم است.';return}submitBrandAnalysis();return}assessmentStep++;updateAssessment()});
 document.addEventListener('change',event=>{const input=event.target,form=input.closest('#assessment-step-form');if(!form)return;const question=assessmentFlow()[assessmentStep];if(input.name==='skip'){const text=form.querySelector('#assessment-answer');text.disabled=input.checked;text.required=!input.checked;if(input.checked)text.value=''}if(question.type==='multi'&&input.name==='answer'&&question.none&&input.checked){const inputs=[...form.querySelectorAll('[name=answer]')];if(question.options[Number(input.value)]===question.none)inputs.forEach(other=>{if(other!==input)other.checked=false});else inputs[question.options.indexOf(question.none)].checked=false}if(question.max&&form.querySelectorAll('[name=answer]:checked').length>question.max){input.checked=false;form.querySelector('#assessment-feedback').textContent=`حداکثر ${question.max} گزینه انتخاب کن.`}else form.querySelector('#assessment-feedback').textContent=''});
 document.addEventListener('click',event=>{
-  if(event.target.id==='assessment-retry') submitBrandAnalysis();
+  if(event.target.id==='consultation-open') loadConsultation();
+  else if(event.target.id==='consultation-refresh-slots') loadConsultation(true);
+  else if(event.target.id==='consultation-new') {consultationBookingOpen=true;updateConsultation()}
+  else if(event.target.id==='assessment-retry') submitBrandAnalysis();
   else if(event.target.id==='assessment-edit') {
     assessmentRequestId++;
     assessmentPending=false;

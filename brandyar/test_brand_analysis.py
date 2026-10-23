@@ -2,6 +2,7 @@ import json
 import sqlite3
 import tempfile
 import threading
+import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from http.client import HTTPConnection
@@ -248,6 +249,269 @@ class StorageTests(unittest.TestCase):
                 finish.set()
             self.assertEqual(len(task.result()['priority_actions']), 3)
             self.assertEqual(generate_mock.call_count, 1)
+
+
+class ConsultationTests(unittest.TestCase):
+    path = '/api/assessment/consultation'
+
+    @classmethod
+    def setUpClass(cls):
+        cls.http = ThreadingHTTPServer(('127.0.0.1', 0), server.Handler)
+        cls.thread = threading.Thread(target=cls.http.serve_forever)
+        cls.thread.start()
+        cls.port = cls.http.server_address[1]
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.http.shutdown(); cls.http.server_close(); cls.thread.join()
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory(dir=Path(__file__).parent)
+        self.addCleanup(self.directory.cleanup)
+        self.addCleanup(patch.stopall)
+        patch.object(server, 'DB', Path(self.directory.name) / 'consultation.sqlite').start()
+        patch.object(analysis, 'configured', return_value=True).start()
+        self.provider = patch.object(analysis, 'generate_report').start()
+        self.headers = {'Content-Type':'application/json', 'X-Forwarded-Proto':'https', 'Origin':f'https://127.0.0.1:{self.port}'}
+        with server.connect() as db:
+            analysis.initialize(db)
+
+    def call(self, method, path, body=None, cookie='', headers=None):
+        connection = HTTPConnection('127.0.0.1', self.port, timeout=10)
+        request_headers = {**self.headers, 'Cookie':cookie, **(headers or {})}
+        connection.request(method, path, json.dumps(body) if body is not None else None, request_headers)
+        response = connection.getresponse()
+        raw = response.read()
+        payload = json.loads(raw) if response.getheader('Content-Type', '').startswith('application/json') else raw.decode()
+        result = response.status, payload, dict(response.getheaders())
+        connection.close()
+        return result
+
+    def assessment(self, ready=True, report=None):
+        status, _, headers = self.call('GET', '/api/assessment/status')
+        self.assertEqual(status, 200)
+        cookie = headers['Set-Cookie'].split(';')[0]
+        self.assertIn('Path=/api/assessment/', headers['Set-Cookie'])
+        if ready:
+            session_hash = analysis.hashlib.sha256(cookie.split('=', 1)[1].encode()).hexdigest()
+            with server.connect() as db:
+                db.execute('INSERT INTO assessment_jobs VALUES(?,?,?,?,?)', (session_hash, 'test', 'ready', int(time.time()), json.dumps(sample_report() if report is None else report)))
+        return cookie
+
+    def staff(self, role='owner', verified=True):
+        token = server.secrets.token_hex(32)
+        csrf = 'test-csrf'
+        with server.connect() as db:
+            now = int(time.time())
+            staff_id = db.execute('INSERT INTO staff(email,name,role,salt,password_hash,totp_secret) VALUES(?,?,?,?,?,?)', (f'{token}@example.test','مدیر آزمایشی',role,b'test',b'test','test')).lastrowid
+            db.execute('INSERT INTO sessions VALUES(?,?,?,?,?,?,?)', (analysis.hashlib.sha256(token.encode()).hexdigest(), staff_id, csrf, int(verified), now, now, now+3600))
+        return f'brandysid={token}', csrf
+
+    def slot(self, starts=None, status='open'):
+        with server.connect() as db:
+            return db.execute('INSERT INTO consultation_slots(starts_at,duration_minutes,status,capacity,created_at) VALUES(?,?,?,?,?)', (starts or int(time.time())+86400,60,status,1,int(time.time()))).lastrowid
+
+    def body(self, slot, phone='۰۹۱۲-۱۲۳-۴۵۶۷', **changes):
+        return {'name':'', 'phone':phone, 'slotId':slot, 'notes':'', **changes}
+
+    def test_iranian_phone_normalization(self):
+        handler = object.__new__(server.Handler)
+        for value in ('۰۹۱۲-۱۲۳-۴۵۶۷', '+989121234567', '989121234567', '٠٩١٢١٢٣٤٥٦٧'):
+            self.assertEqual(handler.consultation_phone(value), '09121234567')
+        for value in ('', '0912', '0912123456a', '02112345678', '+98912123456', '0'*40, None, 9121234567, '09𝟙𝟚𝟙𝟚𝟛𝟜𝟝𝟞𝟟'):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                handler.consultation_phone(value)
+
+    def test_gate_session_report_origin_and_https(self):
+        self.assertEqual(self.call('GET', self.path)[0], 401)
+        no_report = self.assessment(ready=False)
+        self.assertEqual(self.call('GET', self.path, cookie=no_report)[0], 403)
+        self.assertEqual(self.call('POST', self.path, self.body(1), no_report)[0], 403)
+        malformed = self.assessment(report={'summary':'ناقص'})
+        self.assertEqual(self.call('GET', self.path, cookie=malformed)[0], 403)
+        cookie = self.assessment()
+        self.assertEqual(self.call('POST', self.path, self.body(1), cookie, {'Origin':'https://untrusted.test'})[0], 403)
+        self.assertEqual(self.call('POST', self.path, self.body(1), cookie, {'X-Forwarded-Proto':'http'})[0], 403)
+        self.assertEqual(self.call('GET', self.path, cookie=cookie, headers={'X-Forwarded-Proto':'http'})[0], 503)
+        self.assertEqual(self.call('GET', self.path, cookie=cookie+'tampered')[0], 401)
+        self.provider.assert_not_called()
+
+    def test_slots_empty_future_open_and_private(self):
+        cookie = self.assessment()
+        self.assertEqual(self.call('GET', self.path, cookie=cookie)[1]['slots'], [])
+        open_slot = self.slot()
+        self.slot(starts=int(time.time())-1)
+        for state in ('requested','confirmed','blocked','cancelled'):
+            self.slot(status=state)
+        status, data, headers = self.call('GET', self.path, cookie=cookie)
+        self.assertEqual(status, 200)
+        self.assertEqual([row['id'] for row in data['slots']], [open_slot])
+        self.assertEqual(set(data['slots'][0]), {'id','startsAt','durationMinutes','timeZone'})
+        self.assertEqual(data['slots'][0]['timeZone'], 'Asia/Tehran')
+        self.assertEqual(headers['Cache-Control'], 'no-store')
+        self.assertNotIn('phone', json.dumps(data))
+
+    def test_request_pending_isolated_and_duplicate_phone(self):
+        cookie, other = self.assessment(), self.assessment()
+        slot = self.slot()
+        status, data, _ = self.call('POST', self.path, self.body(slot), cookie)
+        self.assertEqual(status, 201)
+        self.assertEqual(data['request']['state'], 'pending')
+        self.assertIn('بعد از تأیید', data['message'])
+        self.assertNotIn('phone', json.dumps(data))
+        own = self.call('GET', self.path, cookie=cookie)[1]
+        foreign = self.call('GET', self.path, cookie=other)[1]
+        self.assertEqual(own['request']['state'], 'pending')
+        self.assertIsNone(foreign['request'])
+        self.assertEqual(foreign['slots'], [])
+        second = self.slot(starts=int(time.time())+172800)
+        self.assertEqual(self.call('POST', self.path, self.body(second), cookie)[0], 409)
+        status, data, _ = self.call('POST', self.path, self.body(second), other)
+        self.assertEqual(status, 409)
+        self.assertNotIn('phone', json.dumps(data))
+        with server.connect() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM consultation_requests').fetchone()[0], 1)
+            self.assertEqual(db.execute('SELECT phone FROM consultation_requests').fetchone()[0], '09121234567')
+            self.assertEqual(db.execute('SELECT status FROM consultation_slots WHERE id=?', (second,)).fetchone()[0], 'open')
+        self.provider.assert_not_called()
+
+    def test_validation_and_session_rate_limit(self):
+        slot = self.slot()
+        invalid = [self.body(slot, phone=value) for value in ('','0912','0912123456a','02112345678')]
+        invalid += [self.body(slot, notes='الف'*70), self.body(slot, name='ن'*121), self.body(True), self.body(str(slot)), self.body(slot, name={}), self.body(slot, phone=None)]
+        for body in invalid:
+            cookie = self.assessment()
+            self.assertEqual(self.call('POST', self.path, body, cookie)[0], 422)
+        cookie = self.assessment()
+        for _ in range(5):
+            self.assertEqual(self.call('POST', self.path, self.body(slot, phone=''), cookie)[0], 422)
+        self.assertEqual(self.call('POST', self.path, self.body(slot), cookie)[0], 429)
+        with server.connect() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM consultation_requests').fetchone()[0], 0)
+
+    def test_past_blocked_and_unknown_slots_rejected(self):
+        cookie = self.assessment()
+        for slot in (self.slot(starts=int(time.time())-1), self.slot(status='blocked'), 999):
+            self.assertEqual(self.call('POST', self.path, self.body(slot), cookie)[0], 409)
+
+    def test_parallel_booking_and_confirmation(self):
+        cookies = [self.assessment(), self.assessment()]
+        slot = self.slot()
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda index: self.call('POST', self.path, self.body(slot, phone=f'0912123456{index}'), cookies[index])[0], range(2)))
+        self.assertEqual(sorted(results), [201,409])
+        admin, csrf = self.staff()
+        with server.connect() as db:
+            request_id = db.execute('SELECT id FROM consultation_requests').fetchone()[0]
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda _: self.call('POST','/api/admin/consultation-status',{'requestId':request_id,'status':'confirmed','csrf':csrf},admin)[0], range(2)))
+        self.assertEqual(sorted(results), [200,422])
+        with server.connect() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM consultation_requests WHERE status='confirmed'").fetchone()[0], 1)
+        self.assertEqual(self.call('GET', self.path, cookie=cookies[0])[1]['slots'], [])
+
+    def test_admin_roles_mfa_csrf_and_private_number(self):
+        cookie = self.assessment()
+        self.call('POST', self.path, self.body(self.slot()), cookie)
+        for role in ('viewer','finance','product'):
+            admin, csrf = self.staff(role)
+            status, data, _ = self.call('GET','/api/admin/consultations',cookie=admin)
+            self.assertEqual(status,403)
+            self.assertNotIn('09121234567',json.dumps(data))
+            self.assertEqual(self.call('POST','/api/admin/consultation-status',{'requestId':1,'status':'confirmed','csrf':csrf},admin)[0],403)
+        unverified, _ = self.staff(verified=False)
+        self.assertEqual(self.call('GET','/api/admin/consultations',cookie=unverified)[0],401)
+        self.assertEqual(self.call('GET','/admin',cookie=unverified)[0],404)
+        for role in ('owner','support'):
+            admin, csrf = self.staff(role)
+            status, data, _ = self.call('GET','/api/admin/consultations',cookie=admin)
+            self.assertEqual(status,200)
+            self.assertEqual(data['requests'][0]['phone'],'09121234567')
+            self.assertEqual(self.call('GET','/admin',cookie=admin)[0],200)
+            self.assertEqual(self.call('POST','/api/admin/consultation-status',{'requestId':1,'status':'confirmed','csrf':'wrong'},admin)[0],403)
+        self.assertEqual(self.call('GET','/api/admin/consultations')[0],401)
+
+    def test_admin_slot_timezone_overlap_block_cancel_and_reopen(self):
+        admin, csrf = self.staff()
+        local = server.datetime.datetime.now(server.ZoneInfo(server.CONSULTATION_TIMEZONE)) + server.datetime.timedelta(days=2)
+        day = local.strftime('%Y-%m-%d')
+        payload = {'date':day,'time':'10:00','durationMinutes':60,'csrf':csrf}
+        self.assertEqual(self.call('POST','/api/admin/consultation-slots',payload,admin)[0],201)
+        self.assertEqual(self.call('POST','/api/admin/consultation-slots',{**payload,'time':'10:30'},admin)[0],422)
+        expected = int(server.datetime.datetime.strptime(day+' 10:00','%Y-%m-%d %H:%M').replace(tzinfo=server.ZoneInfo(server.CONSULTATION_TIMEZONE)).timestamp())
+        with server.connect() as db:
+            row = db.execute('SELECT * FROM consultation_slots').fetchone()
+            self.assertEqual(row['starts_at'],expected)
+            slot = row['id']
+        for state in ('blocked','open','cancelled','open'):
+            self.assertEqual(self.call('POST','/api/admin/consultation-slot-status',{'slotId':slot,'status':state,'csrf':csrf},admin)[0],200)
+        self.assertEqual(self.call('POST','/api/admin/consultation-slot-status',{'slotId':999,'status':'open','csrf':csrf},admin)[0],422)
+        self.assertEqual(self.call('POST','/api/admin/consultation-slots',{**payload,'date':'2020-01-01'},admin)[0],422)
+        with server.connect() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM audit').fetchone()[0],5)
+
+    def test_request_state_machine_and_private_audit(self):
+        cookie = self.assessment()
+        slot = self.slot()
+        self.call('POST',self.path,self.body(slot),cookie)
+        admin, csrf = self.staff()
+        body = {'requestId':1,'status':'confirmed','csrf':csrf}
+        self.assertEqual(self.call('POST','/api/admin/consultation-status',{**body,'status':'completed'},admin)[0],422)
+        self.assertEqual(self.call('POST','/api/admin/consultation-status',body,admin)[0],200)
+        self.assertEqual(self.call('GET',self.path,cookie=cookie)[1]['request']['state'],'confirmed')
+        self.assertEqual(self.call('POST','/api/admin/consultation-status',{**body,'status':'completed'},admin)[0],422)
+        self.assertEqual(self.call('POST','/api/admin/consultation-status',{**body,'status':'cancelled'},admin)[0],200)
+        self.assertEqual(self.call('GET',self.path,cookie=cookie)[1]['request']['state'],'cancelled')
+        self.assertEqual(self.call('POST','/api/admin/consultation-status',body,admin)[0],422)
+        with server.connect() as db:
+            audit = [dict(row) for row in db.execute('SELECT action,result FROM audit')]
+            self.assertEqual(len(audit),2)
+            self.assertNotIn('09121234567',json.dumps(audit))
+            self.assertEqual(db.execute('SELECT count(*) FROM consultation_requests').fetchone()[0],1)
+
+    def test_overlapping_legacy_slots_cannot_both_be_confirmed(self):
+        first, second = self.slot(), self.slot()
+        cookies = [self.assessment(), self.assessment()]
+        for index, slot in enumerate((first,second)):
+            self.assertEqual(self.call('POST',self.path,self.body(slot,phone=f'0912123456{index}'),cookies[index])[0],201)
+        admin, csrf = self.staff()
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            statuses = list(pool.map(lambda request_id:self.call('POST','/api/admin/consultation-status',{'requestId':request_id,'status':'confirmed','csrf':csrf},admin)[0],(1,2)))
+        self.assertEqual(sorted(statuses),[200,422])
+
+    def test_completed_only_after_session_end(self):
+        cookie = self.assessment()
+        slot = self.slot()
+        self.assertEqual(self.call('POST', self.path, self.body(slot), cookie)[0], 201)
+        admin, csrf = self.staff()
+        payload = {'requestId': 1, 'status': 'confirmed', 'csrf': csrf}
+        self.assertEqual(self.call('POST', '/api/admin/consultation-status', payload, admin)[0], 200)
+        with server.connect() as db:
+            db.execute('UPDATE consultation_slots SET starts_at=? WHERE id=?', (int(time.time()) - 7200, slot))
+        payload['status'] = 'completed'
+        self.assertEqual(self.call('POST', '/api/admin/consultation-status', payload, admin)[0], 200)
+        self.assertEqual(self.call('GET', self.path, cookie=cookie)[1]['request']['state'], 'completed')
+        self.assertEqual(self.call('POST', '/api/admin/consultation-status', payload, admin)[0], 422)
+
+    def test_failed_write_rolls_back_request_and_slot(self):
+        cookie = self.assessment()
+        slot = self.slot()
+        with server.connect() as db:
+            db.execute("CREATE TRIGGER reject_slot_update BEFORE UPDATE ON consultation_slots BEGIN SELECT RAISE(ABORT, 'private storage detail'); END")
+        status, data, _ = self.call('POST', self.path, self.body(slot), cookie)
+        self.assertNotIn(status, (200, 201))
+        self.assertNotIn('private', json.dumps(data))
+        with server.connect() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM consultation_requests').fetchone()[0], 0)
+            self.assertEqual(db.execute('SELECT status FROM consultation_slots WHERE id=?', (slot,)).fetchone()[0], 'open')
+
+    def test_storage_failure_never_returns_success(self):
+        cookie = self.assessment()
+        with patch.object(server,'connect',side_effect=sqlite3.OperationalError('private details')):
+            status, data, _ = self.call('POST',self.path,self.body(1),cookie)
+        self.assertEqual(status,503)
+        self.assertNotIn('private',json.dumps(data))
+        self.assertNotIn('message',data)
 
 
 class EndpointTests(unittest.TestCase):

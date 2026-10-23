@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>مدیریت مشاوره | نشارو</title>
+<link rel="stylesheet" href="/admin-panel.css">
+</head>
+<body>
+<main class="admin-shell">
+<header><div><strong>نشارو</strong><span>مدیریت مشاوره‌های برند شخصی</span></div><button id="logout" type="button">خروج</button></header>
+<p id="feedback" role="status" aria-live="polite"></p>
+<div class="actions"><button id="reload" type="button" class="secondary">به‌روزرسانی فهرست‌ها</button><a href="/">بازگشت به سایت</a></div>
+<section class="panel">
+<h1>تعریف زمان مشاوره</h1>
+<p id="timezone" class="muted"></p>
+<form id="slot-form" hidden>
+<label>تاریخ شمسی<select id="slot-date" name="date" required><option value="">تاریخ را انتخاب کنید</option></select></label>
+<label>ساعت شروع<input name="time" type="time" required></label>
+<label>مدت جلسه<select name="durationMinutes"><option value="30">۳۰ دقیقه</option><option value="45">۴۵ دقیقه</option><option value="60" selected>۶۰ دقیقه</option><option value="90">۹۰ دقیقه</option></select></label>
+<button type="submit">افزودن زمان باز</button>
+</form>
+<p class="muted">ظرفیت هر زمان یک نفر است. زمان‌های هم‌پوشان پذیرفته نمی‌شوند. ثبت‌ها حذف نمی‌شوند و تغییر وضعیت در سابقهٔ فعالیت ثبت می‌شود.</p>
+</section>
+<section class="panel"><h2>زمان‌ها</h2><div id="slots" class="table-wrap" aria-busy="true">در حال بارگذاری…</div></section>
+<section class="panel"><h2>درخواست‌ها</h2><p class="muted">اطلاعات تماس فقط برای هماهنگی مشاوره است؛ از کپی یا اشتراک‌گذاری غیرضروری آن خودداری کنید.</p><div id="requests" class="table-wrap" aria-busy="true">در حال بارگذاری…</div></section>
+</main>
+<script src="/admin-panel.js"></script>
+</body>
+</html>
