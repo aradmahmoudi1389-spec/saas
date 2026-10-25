@@ -17,7 +17,9 @@ def is_id(value):
 
 
 class SupabaseUnavailable(Exception):
-    pass
+    def __init__(self, status=None):
+        self.status = status
+        super().__init__()
 
 
 class SupabaseStore:
@@ -58,9 +60,9 @@ class SupabaseStore:
                 if len(raw) > 262144:
                     raise SupabaseUnavailable()
                 return json.loads(raw) if raw else []
-        except SupabaseUnavailable:
-            raise
-        except (HTTPError, URLError, OSError, ValueError, json.JSONDecodeError) as error:
+        except HTTPError as error:
+            raise SupabaseUnavailable(error.code) from error
+        except (URLError, OSError, ValueError, json.JSONDecodeError) as error:
             raise SupabaseUnavailable() from error
 
     def save_assessment(self, session, answers, report):

@@ -546,8 +546,8 @@ class Handler(BaseHTTPRequestHandler):
             if external:
                 try:
                     external.save_assessment(session, answers, report)
-                except supabase_store.SupabaseUnavailable:
-                    logging.getLogger(__name__).warning('database_failure table=assessments')
+                except supabase_store.SupabaseUnavailable as error:
+                    logging.getLogger(__name__).warning('database_failure table=assessments code=%s', error.status or 'network')
                     return self.json(503, {'error': 'ذخیرهٔ ارزیابی انجام نشد. لطفاً دوباره تلاش کن.'})
             return self.json(200, {'report': report})
         except brand_analysis.AnalysisError as error:
