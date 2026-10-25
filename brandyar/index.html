@@ -232,6 +232,7 @@ const assessmentQuestions = [
   {id:'q15',section:'نتیجهٔ تو',title:'دوست داری در نتیجهٔ این ارزیابی، اول دربارهٔ کدام بخش به تو کمک کنیم؟',optional:true,options:['بهتر معرفی کردن موضوع پیجم','پیدا کردن ایده و برنامهٔ محتوا','جلب اعتماد بیشتر','گرفتن درخواست و فروش بیشتر','ساختن مسیر کلی پیجم','هنوز مطمئن نیستم']}
 ];
 let assessmentResult = null;
+let assessmentSessionToken = '';
 let reportLeadStatus = 'unchecked';
 let reportLeadError = '';
 let reportLeadRequest = 0;
@@ -257,10 +258,11 @@ try {
   if (saved && saved.answers && typeof saved.answers === 'object' && !Array.isArray(saved.answers) && Date.now() - saved.at >= 0 && Date.now() - saved.at < 3600000) {
     assessmentAnswers = saved.answers;
     assessmentResult = validBrandReport(saved.report) ? saved.report : null;
+    assessmentSessionToken = typeof saved.sessionToken === 'string' && /^[0-9a-f]{64}$/.test(saved.sessionToken) ? saved.sessionToken : '';
   }
 } catch {}
 function saveAssessmentSession() {
-  try { sessionStorage.setItem(assessmentStorageKey, JSON.stringify({answers:assessmentAnswers,report:assessmentResult,at:Date.now()})); } catch {}
+  try { sessionStorage.setItem(assessmentStorageKey, JSON.stringify({answers:assessmentAnswers,report:assessmentResult,sessionToken:assessmentSessionToken,at:Date.now()})); } catch {}
 }
 async function submitBrandAnalysis() {
   if (assessmentPending) return;
@@ -268,6 +270,7 @@ async function submitBrandAnalysis() {
   assessmentPending = true;
   assessmentError = '';
   assessmentResult = null;
+  assessmentSessionToken = '';
   analysisSucceededAt = 0;
   reportLeadStatus = 'unchecked';
   reportLeadRequest++;
@@ -288,12 +291,14 @@ async function submitBrandAnalysis() {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'تحلیل الان کامل نشد. لطفاً دوباره تلاش کن.');
     if (!validBrandReport(data.report)) throw new Error('گزارش معتبر دریافت نشد. لطفاً دوباره تلاش کن.');
+    if (typeof data.session_id !== 'string' || !/^[0-9a-f]{64}$/.test(data.session_id)) throw new Error('نشست ارزیابی معتبر نیست. دوباره تلاش کن.');
     if (requestId !== assessmentRequestId) return;
     assessmentResult = data.report;
+    assessmentSessionToken = data.session_id;
     analysisSucceededAt = Date.now();
     const storageController = new AbortController();
     const storageTimer = setTimeout(() => storageController.abort(), 15000);
-    fetch('/api/assessments', {method:'POST',credentials:'same-origin',cache:'no-store',signal:storageController.signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:'current',answers:assessmentAnswers,insight:data.report})}).catch(() => {}).finally(() => clearTimeout(storageTimer));
+    fetch('/api/assessments', {method:'POST',credentials:'same-origin',cache:'no-store',signal:storageController.signal,headers:{'Content-Type':'application/json','X-Nesharo-Assessment-Session':assessmentSessionToken},body:JSON.stringify({session_id:'current',answers:assessmentAnswers,insight:data.report})}).catch(() => {}).finally(() => clearTimeout(storageTimer));
   } catch (error) {
     if (requestId === assessmentRequestId) assessmentError = ['SyntaxError','TypeError','AbortError'].includes(error.name) ? 'تحلیل الان کامل نشد. لطفاً دوباره تلاش کن.' : error.message;
   } finally {
@@ -430,6 +435,7 @@ async function requestReportLead(form = null) {
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
     const headers = {'Content-Type':'application/json'};
+    if (assessmentSessionToken) headers['X-Nesharo-Assessment-Session'] = assessmentSessionToken;
     if (Date.now() - analysisSucceededAt < 180000) headers['X-Nesharo-Supabase-Grace'] = String(Math.ceil((Date.now() - analysisSucceededAt) / 1000));
     const response = await fetch('/api/assessment/lead', {method:form?'POST':'GET',credentials:'same-origin',cache:'no-store',signal:controller.signal,...(form?{headers,body:JSON.stringify({phone,consent:true})}:{headers})});
     const data = await response.json();

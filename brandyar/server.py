@@ -258,7 +258,8 @@ class Handler(BaseHTTPRequestHandler):
         return peer
 
     def assessment_session(self):
-        value = next((v.strip().split('=', 1)[1] for v in self.headers.get('Cookie', '').split(';') if v.strip().startswith('brandyassessment=')), '')
+        cookie = next((v.strip().split('=', 1)[1] for v in self.headers.get('Cookie', '').split(';') if v.strip().startswith('brandyassessment=')), '')
+        value = self.headers.get('X-Nesharo-Assessment-Session', '') or cookie
         if len(value) > 150:
             return None
         if re.fullmatch(r'[0-9a-f]{64}', value):
@@ -560,7 +561,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             with connect() as db:
                 report = brand_analysis.analyze(db, session, self.assessment_source(), answers)
-            return self.json(200, {'report': report}, headers)
+            return self.json(200, {'report': report, 'session_id': session}, headers)
         except brand_analysis.AnalysisError as error:
             return self.json(error.status, {'error': error.message}, headers)
         except (sqlite3.Error, ValueError, TypeError):

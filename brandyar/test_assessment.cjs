@@ -32,7 +32,7 @@ function harness(saved=null) {
     esc:value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),
     document:{addEventListener:(name,fn)=>(listeners[name]??=[]).push(fn),querySelector:()=>null,getElementById:()=>null},
     route:()=>{},
-    fetch:async (url,options)=>{requests.push({url,options});return {ok:true,json:async()=>url.endsWith('/status')?{ready:true}:{report}};}
+    fetch:async (url,options)=>{requests.push({url,options});return {ok:true,json:async()=>url.endsWith('/status')?{ready:true}:{report,session_id:'a'.repeat(64)}};}
   };
   vm.createContext(context);vm.runInContext(block,context);
   return {context,storage,listeners,requests,run:code=>vm.runInContext(code,context)};
@@ -51,7 +51,7 @@ function harness(saved=null) {
     if(url.endsWith('/status'))return {ok:true,json:async()=>({ready:true})};
     if(url==='/api/assessments')return {ok:false,json:async()=>({error:'ذخیره انجام نشد'})};
     await new Promise(resolve=>release=resolve);
-    return {ok:true,json:async()=>({report})};
+    return {ok:true,json:async()=>({report,session_id:'a'.repeat(64)})};
   };
   const pending=h.run('submitBrandAnalysis()');
   await new Promise(resolve=>setImmediate(resolve));
@@ -85,7 +85,7 @@ function harness(saved=null) {
   independent.context.fetch = async url => {
     if (url.endsWith('/status')) return {ok:true,json:async()=>({ready:true})};
     if (url === '/api/assessments') return new Promise((resolve,reject)=>{failStorage=reject});
-    return {ok:true,json:async()=>({report})};
+    return {ok:true,json:async()=>({report,session_id:'a'.repeat(64)})};
   };
   await independent.run('submitBrandAnalysis()');
   assert.equal(independent.run('assessmentPending'),false);
