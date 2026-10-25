@@ -416,7 +416,7 @@ class ConsultationTests(unittest.TestCase):
 
     def test_report_lead_storage_failure_does_not_claim_success(self):
         cookie = self.assessment()
-        with patch.object(server, 'connect', side_effect=sqlite3.OperationalError('private details')):
+        with patch.object(server, 'connect', side_effect=sqlite3.OperationalError('private details')), patch.object(server.Handler, 'assessment_session', return_value=cookie.split('=', 1)[1]):
             status, data, _ = self.call('POST', '/api/assessment/lead', {'phone':'09121234567','consent':True}, cookie)
         self.assertEqual(status, 503)
         self.assertNotIn('registered', data)
@@ -683,7 +683,7 @@ class ConsultationTests(unittest.TestCase):
 
     def test_storage_failure_never_returns_success(self):
         cookie = self.assessment()
-        with patch.object(server,'connect',side_effect=sqlite3.OperationalError('private details')):
+        with patch.object(server,'connect',side_effect=sqlite3.OperationalError('private details')), patch.object(server.Handler, 'assessment_session', return_value=cookie.split('=', 1)[1]):
             status, data, _ = self.call('POST',self.path,self.body(1),cookie)
         self.assertEqual(status,503)
         self.assertNotIn('private',json.dumps(data))
@@ -724,10 +724,7 @@ class EndpointTests(unittest.TestCase):
 
     def test_analysis_response_never_waits_for_supabase(self):
         headers = {'X-Forwarded-Proto': 'https', 'Origin': f'https://127.0.0.1:{self.port}', 'Content-Type': 'application/json'}
-        with patch.object(analysis, 'configured', return_value=True), patch.object(server.Handler, 'supabase', side_effect=AssertionError('Storage must be separate')) as external, patch.object(analysis, 'analyze', return_value=sample_report()), patch.object(server, 'connect'):
-            _, _, result_headers = self.request('GET', '/api/assessment/status', headers=headers)
-            self.assertIn('Path=/api/;', result_headers['Set-Cookie'])
-            headers['Cookie'] = result_headers['Set-Cookie'].split(';')[0]
+        with patch.object(analysis, 'configured', return_value=True), patch.object(server.Handler, 'supabase', side_effect=AssertionError('Storage must be separate')) as external, patch.object(server.Handler, 'assessment_session', return_value='test-session'), patch.object(analysis, 'analyze', return_value=sample_report()), patch.object(server, 'connect'):
             status, data, _ = self.request('POST', '/api/assessment/analyze', json.dumps(sample_answers()), headers)
             self.assertEqual(status, 200)
             self.assertEqual(data['report'], sample_report())
@@ -751,7 +748,7 @@ class EndpointTests(unittest.TestCase):
             self.assertEqual(status, 422)
             self.assertIn('Path=/api/;', result_headers['Set-Cookie'])
             headers['Cookie'] = cookie.split(';')[0]
-            with patch.object(analysis, 'analyze', return_value=sample_report()), patch.object(server, 'connect') as connect:
+            with patch.object(analysis, 'analyze', return_value=sample_report()), patch.object(server.Handler, 'assessment_session', return_value=cookie.split('=', 1)[1]), patch.object(server, 'connect') as connect:
                 connect.return_value.__enter__.return_value = object()
                 status, data, _ = self.request('POST', '/api/assessment/analyze', json.dumps(sample_answers()), headers)
                 self.assertEqual(status, 200); self.assertEqual(len(data['report']['priority_actions']), 3)

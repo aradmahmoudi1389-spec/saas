@@ -58,6 +58,8 @@ def connect():
         CREATE UNIQUE INDEX IF NOT EXISTS consultation_active_phone ON consultation_requests(phone) WHERE status IN ('pending','confirmed');
         CREATE UNIQUE INDEX IF NOT EXISTS consultation_active_slot ON consultation_requests(slot_id) WHERE status IN ('pending','confirmed');
         CREATE TABLE IF NOT EXISTS assessment_leads (session_hash TEXT PRIMARY KEY, phone TEXT NOT NULL, consent_version TEXT NOT NULL, created_at INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS assessment_sessions (token_hash TEXT PRIMARY KEY, expires INTEGER NOT NULL);
+        CREATE INDEX IF NOT EXISTS assessment_sessions_expiry ON assessment_sessions(expires);
         CREATE TABLE IF NOT EXISTS consultation_attempts (session_hash TEXT NOT NULL, at INTEGER NOT NULL);
         CREATE INDEX IF NOT EXISTS consultation_attempts_lookup ON consultation_attempts(session_hash,at);
         CREATE INDEX IF NOT EXISTS consultation_slots_lookup ON consultation_slots(status,starts_at);
@@ -259,6 +261,14 @@ class Handler(BaseHTTPRequestHandler):
         value = next((v.strip().split('=', 1)[1] for v in self.headers.get('Cookie', '').split(';') if v.strip().startswith('brandyassessment=')), '')
         if len(value) > 150:
             return None
+        if re.fullmatch(r'[0-9a-f]{64}', value):
+            try:
+                with connect() as db:
+                    now = int(time.time())
+                    valid = db.execute('SELECT 1 FROM assessment_sessions WHERE token_hash=? AND expires>?', (hashlib.sha256(value.encode()).hexdigest(), now)).fetchone() is not None
+                return value if valid else None
+            except sqlite3.Error:
+                return None
         parts = value.split('.')
         if len(parts) != 3 or not parts[0].isascii() or not parts[0].isdigit() or len(parts[0]) > 10 or len(parts[1]) != 64 or len(parts[2]) != 64:
             return None
@@ -515,9 +525,12 @@ class Handler(BaseHTTPRequestHandler):
         db.execute('INSERT INTO audit(staff_id,action,result,at) VALUES(?,?,?,?)', (staff['staff_id'], action, result, int(time.time())))
 
     def new_assessment_session(self):
-        value = f'{int(time.time())}.{secrets.token_hex(32)}'
-        signature = hmac.new(ASSESSMENT_COOKIE_KEY, value.encode(), hashlib.sha256).hexdigest()
-        return value + '.' + signature, f'brandyassessment={value}.{signature}; HttpOnly; Secure; SameSite=Strict; Path=/api/; Max-Age=3600'
+        value = secrets.token_hex(32)
+        now = int(time.time())
+        with connect() as db:
+            db.execute('DELETE FROM assessment_sessions WHERE expires<=?', (now,))
+            db.execute('INSERT INTO assessment_sessions(token_hash,expires) VALUES(?,?)', (hashlib.sha256(value.encode()).hexdigest(), now + 3600))
+        return value, f'brandyassessment={value}; HttpOnly; Secure; SameSite=Strict; Path=/api/; Max-Age=3600'
 
     def assessment_status(self):
         if not self.assessment_https():
