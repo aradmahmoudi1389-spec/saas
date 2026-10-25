@@ -326,7 +326,7 @@ class ConsultationTests(unittest.TestCase):
         status, _, headers = self.call('GET', '/api/assessment/status')
         self.assertEqual(status, 200)
         cookie = headers['Set-Cookie'].split(';')[0]
-        self.assertIn('Path=/api/assessment/', headers['Set-Cookie'])
+        self.assertIn('Path=/api/', headers['Set-Cookie'])
         if ready:
             session_hash = analysis.hashlib.sha256(cookie.split('=', 1)[1].encode()).hexdigest()
             with server.connect() as db:
@@ -706,6 +706,17 @@ class EndpointTests(unittest.TestCase):
             handler.client_address = (peer, 12345)
             handler.headers = {'X-Forwarded-For': forwarded}
             self.assertEqual(handler.assessment_source(), expected)
+
+    def test_analysis_response_never_waits_for_supabase(self):
+        headers = {'X-Forwarded-Proto': 'https', 'Origin': f'https://127.0.0.1:{self.port}', 'Content-Type': 'application/json'}
+        with patch.object(analysis, 'configured', return_value=True), patch.object(server.Handler, 'supabase', side_effect=AssertionError('Storage must be separate')) as external, patch.object(analysis, 'analyze', return_value=sample_report()), patch.object(server, 'connect'):
+            _, _, result_headers = self.request('GET', '/api/assessment/status', headers=headers)
+            self.assertIn('Path=/api/;', result_headers['Set-Cookie'])
+            headers['Cookie'] = result_headers['Set-Cookie'].split(';')[0]
+            status, data, _ = self.request('POST', '/api/assessment/analyze', json.dumps(sample_answers()), headers)
+            self.assertEqual(status, 200)
+            self.assertEqual(data['report'], sample_report())
+            external.assert_not_called()
 
     def test_transport_config_origin_and_session(self):
         status, data, _ = self.request('GET', '/api/assessment/status')

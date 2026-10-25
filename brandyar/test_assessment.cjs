@@ -49,6 +49,7 @@ function harness(saved=null) {
   h.context.fetch=async (url,options)=>{
     h.requests.push({url,options});
     if(url.endsWith('/status'))return {ok:true,json:async()=>({ready:true})};
+    if(url==='/api/assessments')return {ok:false,json:async()=>({error:'ذخیره انجام نشد'})};
     await new Promise(resolve=>release=resolve);
     return {ok:true,json:async()=>({report})};
   };
@@ -67,9 +68,10 @@ function harness(saved=null) {
   assert(markup.includes(report.strengths[0]));
   assert(markup.indexOf('class="report-preview"') < markup.indexOf('<form id="report-lead-form"'));
   assert.equal((markup.match(/name="phone"/g)||[]).length,1);
-  assert(!markup.includes('id="report-full"'));
-  assert(!markup.includes(report.this_week_action.description));
-  assert(!markup.includes('assessment-download'));
+  assert(markup.includes('id="report-full"'));
+  assert(markup.includes(report.this_week_action.description));
+  assert(markup.includes('assessment-download'));
+  assert(markup.includes('ثبت شماره برای دیدن یا دانلود آن لازم نیست'));
   assert(!markup.includes('consultation-phone'));
   assert.equal(JSON.parse(h.requests[1].options.body).consent,true);
   const saved=JSON.parse(h.storage.get('brandyar-assessment-session-v1'));
@@ -78,6 +80,34 @@ function harness(saved=null) {
   assert.equal(refreshed.requests.length,0);
   refreshed.run("assessmentResult.summary='<img src=x onerror=alert(1)>'");
   assert(!refreshed.run('reportPage()').includes('<img'));
+  const independent = harness();
+  let failStorage;
+  independent.context.fetch = async url => {
+    if (url.endsWith('/status')) return {ok:true,json:async()=>({ready:true})};
+    if (url === '/api/assessments') return new Promise((resolve,reject)=>{failStorage=reject});
+    return {ok:true,json:async()=>({report})};
+  };
+  await independent.run('submitBrandAnalysis()');
+  assert.equal(independent.run('assessmentPending'),false);
+  assert(independent.run('reportPage()').includes('id="report-full"'));
+  assert(independent.run('reportPage()').includes('assessment-download'));
+  failStorage(new TypeError('private storage detail'));
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(independent.run('assessmentError'),'');
+  const independentSaved=JSON.parse(independent.storage.get('brandyar-assessment-session-v1'));
+  const independentRefresh=harness(independentSaved);
+  assert(independentRefresh.run('reportPage()').includes('id="report-full"'));
+  assert.equal(independentRefresh.requests.length,0);
+  let downloaded=false, focusedAxis=false;
+  independent.context.URL={createObjectURL:()=> 'blob:test',revokeObjectURL(){}};
+  independent.context.document.createElement=()=>({click(){downloaded=true}});
+  independent.context.document.getElementById=id=>id==='report-axis-content'?{scrollIntoView(){},focus(){focusedAxis=true}}:null;
+  const reportClick=independent.listeners.click.find(fn=>fn.toString().includes('assessment-download'));
+  reportClick({target:{id:'assessment-download'}});
+  assert(downloaded);
+  const axisNode={dataset:{reportAxis:'content'}};
+  reportClick({target:{closest:()=>axisNode}});
+  assert(focusedAxis);
   const failure=harness();
   failure.run("assessmentAnswers={q1:'آموزش'}");
   failure.context.fetch=async()=>{throw new TypeError('network detail')};
@@ -197,7 +227,7 @@ function harness(saved=null) {
   leadForm.values.phone='۰۹۱۲۱۲۳۴۵۶۷';
   lead.context.fetch=async()=>{throw new TypeError('private error')};
   await lead.run('requestReportLead(leadForm)');
-  assert(!lead.run('reportPage()').includes('id="report-full"'));
+  assert(lead.run('reportPage()').includes('id="report-full"'));
   assert.equal(leadForm.values.phone,'۰۹۱۲۱۲۳۴۵۶۷');
   assert(!leadFeedback.textContent.includes('private error'));
   let releaseLead;
@@ -229,7 +259,7 @@ function harness(saved=null) {
   restoredLead.run("reportLeadStatus='idle'");
   restoredLead.context.fetch=async()=>({ok:false,json:async()=>({error:'نشست منقضی شده است.'})});
   await restoredLead.run('requestReportLead()');
-  assert(!restoredLead.run('reportPage()').includes('id="report-full"'));
+  assert(restoredLead.run('reportPage()').includes('id="report-full"'));
   const adminElements = new Map();
   const adminListeners = {};
   const adminRequests = [];

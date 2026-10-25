@@ -522,7 +522,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self.assessment_session():
             value = f'{int(time.time())}.{secrets.token_hex(32)}'
             signature = hmac.new(ASSESSMENT_COOKIE_KEY, value.encode(), hashlib.sha256).hexdigest()
-            headers['Set-Cookie'] = f'brandyassessment={value}.{signature}; HttpOnly; Secure; SameSite=Strict; Path=/api/assessment/; Max-Age=3600'
+            headers['Set-Cookie'] = f'brandyassessment={value}.{signature}; HttpOnly; Secure; SameSite=Strict; Path=/api/; Max-Age=3600'
         return self.json(200, {'ready': True}, headers)
 
     def assessment_analyze(self):
@@ -542,13 +542,6 @@ class Handler(BaseHTTPRequestHandler):
         try:
             with connect() as db:
                 report = brand_analysis.analyze(db, session, self.assessment_source(), answers)
-            external = self.supabase()
-            if external:
-                try:
-                    external.save_assessment(session, answers, report)
-                except supabase_store.SupabaseUnavailable as error:
-                    logging.getLogger(__name__).warning('database_failure table=assessments code=%s', error.status or 'network')
-                    return self.json(503, {'error': 'ذخیرهٔ ارزیابی انجام نشد. لطفاً دوباره تلاش کن.'})
             return self.json(200, {'report': report})
         except brand_analysis.AnalysisError as error:
             return self.json(error.status, {'error': error.message})
