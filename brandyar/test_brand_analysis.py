@@ -100,8 +100,8 @@ class SchemaTests(unittest.TestCase):
         root = Path(__file__).parent
         proxy = (root / 'nesharo.nginx.conf').read_text()
         frontend = (root / 'app.js').read_text()
-        self.assertIn('proxy_read_timeout 100s;', proxy)
-        self.assertIn('controller.abort(), 105000)', frontend)
+        self.assertIn('proxy_read_timeout 130s;', proxy)
+        self.assertIn('controller.abort(), 135000)', frontend)
 
     def test_provider_diagnostics_exclude_private_details(self):
         with patch.dict('os.environ', {'BRANDYAR_METIS_API_KEY': 'unit-test-only'}), patch.object(analysis, 'build_opener') as opener:
@@ -126,7 +126,7 @@ class SchemaTests(unittest.TestCase):
             self.assertEqual(request.full_url, analysis.ENDPOINT)
             payload = json.loads(request.data)
             self.assertEqual(payload['model'], 'grok-4.6')
-            self.assertEqual(opener.return_value.open.call_args.kwargs['timeout'], 90)
+            self.assertEqual(opener.return_value.open.call_args.kwargs['timeout'], 120)
             self.assertEqual(payload['messages'][0]['role'], 'system')
             self.assertEqual(payload['messages'][1]['role'], 'user')
             response.read.return_value = b'{"choices": []}'

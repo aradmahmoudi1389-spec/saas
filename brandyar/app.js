@@ -257,7 +257,7 @@ async function submitBrandAnalysis() {
   saveAssessmentSession();
   if (location.hash === '#/report') route(); else location.hash = '#/report';
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 105000);
+  const timer = setTimeout(() => controller.abort(), 135000);
   try {
     if (location.protocol !== 'https:') throw new Error('برای ارسال پاسخ‌ها، اتصال امن سایت باید فعال باشد. پاسخ‌های شما حفظ شده‌اند.');
     const statusResponse = await fetch('/api/assessment/status', {credentials:'same-origin',signal:controller.signal,cache:'no-store'});

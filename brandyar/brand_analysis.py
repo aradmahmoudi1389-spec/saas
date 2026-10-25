@@ -158,7 +158,7 @@ def generate_report(answers):
     request = Request(ENDPOINT, data=json.dumps(payload).encode(), headers={'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key}, method='POST')
     stage = 'connection'
     try:
-        with build_opener(NoRedirect()).open(request, timeout=90) as response:
+        with build_opener(NoRedirect()).open(request, timeout=120) as response:
             stage = 'response_read'
             raw = response.read(65537)
             if len(raw) > 65536:
