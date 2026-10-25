@@ -314,6 +314,64 @@ class ConsultationTests(unittest.TestCase):
     def body(self, slot, phone='۰۹۱۲-۱۲۳-۴۵۶۷', **changes):
         return {'name':'', 'phone':phone, 'slotId':slot, 'notes':'', **changes}
 
+    def test_report_lead_registration_privacy_and_idempotency(self):
+        path = '/api/assessment/lead'
+        cookie = self.assessment()
+        self.assertEqual(self.call('GET', path, cookie=cookie)[1], {'registered': False})
+        body = {'phone': '۰۹۱۲۱۲۳۴۵۶۷', 'consent': True}
+        for _ in range(2):
+            status, data, headers = self.call('POST', path, body, cookie)
+            self.assertEqual(status, 200)
+            self.assertEqual(data, {'registered': True})
+            self.assertEqual(headers['Cache-Control'], 'no-store')
+        self.assertEqual(self.call('GET', path, cookie=cookie)[1], {'registered': True})
+        with server.connect() as db:
+            rows = db.execute('SELECT phone,consent_version FROM assessment_leads').fetchall()
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(tuple(rows[0]), ('09121234567', 'report-access-v1'))
+            self.assertEqual(db.execute('SELECT count(*) FROM consultation_requests').fetchone()[0], 0)
+        other = self.assessment()
+        self.assertEqual(self.call('GET', path, cookie=other)[1], {'registered': False})
+        self.provider.assert_not_called()
+
+    def test_report_lead_rejects_invalid_insecure_or_unready_requests(self):
+        path = '/api/assessment/lead'
+        body = {'phone': '09121234567', 'consent': True}
+        self.assertEqual(self.call('POST', path, body)[0], 401)
+        no_report = self.assessment(ready=False)
+        self.assertEqual(self.call('POST', path, body, no_report)[0], 403)
+        invalid_report = self.assessment(report={'summary': 'ناقص'})
+        self.assertEqual(self.call('POST', path, body, invalid_report)[0], 403)
+        cookie = self.assessment()
+        for changes in ({'phone':'0912'}, {'phone':None}, {'consent':False}, {'extra':'no'}):
+            self.assertEqual(self.call('POST', path, {**body, **changes}, cookie)[0], 422)
+        self.assertEqual(self.call('POST', path, body, cookie, {'Origin':'https://untrusted.test'})[0], 403)
+        self.assertEqual(self.call('POST', path, body, cookie, {'X-Forwarded-Proto':'http'})[0], 403)
+        self.assertEqual(self.call('GET', path, cookie=cookie+'tampered')[0], 401)
+        with server.connect() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM assessment_leads').fetchone()[0], 0)
+            db.execute('UPDATE assessment_jobs SET created=?', (int(time.time())-3601,))
+        self.assertEqual(self.call('GET', path, cookie=cookie)[0], 403)
+        self.provider.assert_not_called()
+
+    def test_report_lead_concurrent_submissions_create_one_record(self):
+        cookie = self.assessment()
+        def submit(_):
+            return self.call('POST', '/api/assessment/lead', {'phone':'09121234567','consent':True}, cookie)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(submit, range(2)))
+        self.assertTrue(all(status == 200 and data == {'registered': True} for status, data, _ in results))
+        with server.connect() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM assessment_leads').fetchone()[0], 1)
+
+    def test_report_lead_storage_failure_does_not_claim_success(self):
+        cookie = self.assessment()
+        with patch.object(server, 'connect', side_effect=sqlite3.OperationalError('private details')):
+            status, data, _ = self.call('POST', '/api/assessment/lead', {'phone':'09121234567','consent':True}, cookie)
+        self.assertEqual(status, 503)
+        self.assertNotIn('registered', data)
+        self.assertNotIn('private details', json.dumps(data))
+
     def test_iranian_phone_normalization(self):
         handler = object.__new__(server.Handler)
         for value in ('۰۹۱۲-۱۲۳-۴۵۶۷', '+989121234567', '989121234567', '٠٩١٢١٢٣٤٥٦٧'):

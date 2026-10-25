@@ -54,6 +54,7 @@ def connect():
         CREATE UNIQUE INDEX IF NOT EXISTS consultation_active_session ON consultation_requests(session_hash) WHERE status IN ('pending','confirmed');
         CREATE UNIQUE INDEX IF NOT EXISTS consultation_active_phone ON consultation_requests(phone) WHERE status IN ('pending','confirmed');
         CREATE UNIQUE INDEX IF NOT EXISTS consultation_active_slot ON consultation_requests(slot_id) WHERE status IN ('pending','confirmed');
+        CREATE TABLE IF NOT EXISTS assessment_leads (session_hash TEXT PRIMARY KEY, phone TEXT NOT NULL, consent_version TEXT NOT NULL, created_at INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS consultation_attempts (session_hash TEXT NOT NULL, at INTEGER NOT NULL);
         CREATE INDEX IF NOT EXISTS consultation_attempts_lookup ON consultation_attempts(session_hash,at);
         CREATE INDEX IF NOT EXISTS consultation_slots_lookup ON consultation_slots(status,starts_at);
@@ -245,6 +246,31 @@ class Handler(BaseHTTPRequestHandler):
                 continue
         return False
 
+    def assessment_lead(self, write=False):
+        if not self.assessment_https() or (write and not self.safe_origin()):
+            return self.json(403, {'error': 'این درخواست به اتصال امن و معتبر نیاز دارد.'})
+        session_hash = self.consultation_session_hash()
+        if not session_hash:
+            return self.json(401, {'error': 'نشست ارزیابی منقضی شده است؛ ارزیابی را دوباره مرور کن.'})
+        try:
+            with connect() as db:
+                if not self.consultation_ready(db, session_hash):
+                    return self.json(403, {'error': 'ابتدا ارزیابی را کامل کن تا گزارش آماده شود.'})
+                if write:
+                    try:
+                        data = self.request_data(512, brand_analysis.parse_json)
+                        if set(data) != {'phone', 'consent'} or data['consent'] is not True:
+                            raise ValueError()
+                        phone = self.consultation_phone(data['phone'])
+                    except (ValueError, TypeError, UnicodeError, RecursionError):
+                        return self.json(422, {'error': 'شماره موبایل را به‌درستی وارد کن.'})
+                    db.execute('INSERT INTO assessment_leads(session_hash,phone,consent_version,created_at) VALUES(?,?,?,?) ON CONFLICT(session_hash) DO NOTHING', (session_hash, phone, 'report-access-v1', int(time.time())))
+                    db.commit()
+                registered = db.execute('SELECT 1 FROM assessment_leads WHERE session_hash=?', (session_hash,)).fetchone() is not None
+            return self.json(200, {'registered': registered})
+        except (sqlite3.Error, OSError):
+            return self.json(503, {'error': 'دریافت تأیید ثبت ممکن نشد. لطفاً دوباره تلاش کن.'})
+
     def consultation_dispatch(self, write=False):
         try:
             return self.consultation_request() if write else self.consultation_public()
@@ -374,6 +400,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == '/api/assessment/status':
             return self.assessment_status()
+        if path == '/api/assessment/lead':
+            return self.assessment_lead()
         if path == '/api/assessment/consultation':
             return self.consultation_dispatch()
         public = {'/', '/index.html', '/styles.css', '/typography.css', '/app.js', '/logo.jpg'}
@@ -414,6 +442,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == '/api/assessment/analyze':
             return self.assessment_analyze()
+        if path == '/api/assessment/lead':
+            return self.assessment_lead(write=True)
         if path == '/api/assessment/consultation':
             return self.consultation_dispatch(write=True)
         if not self.safe_origin():
