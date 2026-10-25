@@ -1,9 +1,11 @@
+import base64
 import json
 import logging
 import os
 import re
 import time
 import uuid
+import zlib
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
@@ -15,7 +17,29 @@ def filter_value(value):
 
 
 def is_id(value):
-    return isinstance(value, str) and re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', value) is not None
+    return isinstance(value, str) and re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', value) is not None
+
+
+def pack_report(report):
+    raw = json.dumps(report, ensure_ascii=False, separators=(',', ':')).encode()
+    return {
+        'encoding': 'zlib-base64-v1',
+        'data': base64.b64encode(zlib.compress(raw, 9)).decode('ascii'),
+    }
+
+
+def unpack_report(value):
+    if not isinstance(value, dict) or value.get('encoding') != 'zlib-base64-v1':
+        return value
+    data = value.get('data')
+    if not isinstance(data, str) or len(data) > 131072:
+        raise ValueError()
+    compressed = base64.b64decode(data, validate=True)
+    decompressor = zlib.decompressobj()
+    raw = decompressor.decompress(compressed, 262145)
+    if len(raw) > 262144 or decompressor.unconsumed_tail or decompressor.unused_data or not decompressor.eof:
+        raise ValueError()
+    return json.loads(raw)
 
 
 class SupabaseUnavailable(Exception):
@@ -88,6 +112,7 @@ class SupabaseStore:
             'content': report['content'],
             'trust': report['trust'],
         }
+        packed_report = pack_report(report)
         # Status only moves forward: a preview can be re-shown without losing an unlocked report.
         current = self.request('assessments', 'GET', 'session_id=eq.' + filter_value(assessment_id) + '&select=id,current_step', prefer='return=minimal')
         if current:
@@ -95,7 +120,7 @@ class SupabaseStore:
             rows = self.request('assessments', 'PATCH', 'id=eq.' + filter_value(assessment_id), {
                 'answers': answers,
                 'insight': insight,
-                'full_report': report,
+                'full_report': packed_report,
                 'current_step': 'completed' if step == 'started' else step,
             })
             if not rows or rows[0].get('id') != assessment_id:
@@ -106,7 +131,7 @@ class SupabaseStore:
             'session_id': assessment_id,
             'answers': answers,
             'insight': insight,
-            'full_report': report,
+            'full_report': packed_report,
             'current_step': 'completed',
             'completed_at': datetime.now(timezone.utc).isoformat(),
         })

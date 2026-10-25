@@ -286,7 +286,8 @@ class Handler(BaseHTTPRequestHandler):
         if not rows or not isinstance(rows[0].get('full_report'), dict):
             return False, None, False
         try:
-            brand_analysis.validate_report(rows[0]['full_report'])
+            report = supabase_store.unpack_report(rows[0]['full_report'])
+            brand_analysis.validate_report(report)
         except (ValueError, TypeError, KeyError):
             return False, None, False
         lead_id = rows[0].get('lead_id')

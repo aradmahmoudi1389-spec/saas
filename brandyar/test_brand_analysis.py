@@ -13,6 +13,7 @@ from urllib.error import HTTPError, URLError
 
 import brand_analysis as analysis
 import server
+import supabase_store
 
 
 def sample_answers(service=False):
@@ -46,6 +47,18 @@ def sample_report():
 
 
 class SupabaseDiagnosticsTests(unittest.TestCase):
+    def test_full_report_is_compact_and_reversible(self):
+        report = sample_report()
+        report['summary'] *= 80
+        packed = supabase_store.pack_report(report)
+        self.assertEqual(supabase_store.unpack_report(packed), report)
+        self.assertLess(len(json.dumps(packed)), len(json.dumps(report, ensure_ascii=False)))
+        store = supabase_store.SupabaseStore.__new__(supabase_store.SupabaseStore)
+        assessment_id = store.session_id('test-session')
+        with patch.object(store, 'request', side_effect=[[], [{'id': assessment_id}]]) as request:
+            self.assertEqual(store.save_assessment('test-session', {}, report), assessment_id)
+        self.assertEqual(request.call_args_list[1].kwargs['body']['full_report'], packed)
+
     def test_failure_categories_never_log_private_values(self):
         import supabase_store
         cases = [
