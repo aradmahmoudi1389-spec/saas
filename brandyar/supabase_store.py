@@ -17,7 +17,7 @@ def filter_value(value):
 
 
 def is_id(value):
-    return isinstance(value, str) and re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', value) is not None
+    return isinstance(value, str) and re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', value) is not None
 
 
 def compact_insight(report):
@@ -75,7 +75,7 @@ class SupabaseStore:
     def session_id(session):
         return str(uuid.uuid5(uuid.NAMESPACE_URL, 'nesharo-assessment:' + session))
 
-    def request(self, table, method='GET', query='', body=None, prefer='return=representation'):
+    def request(self, table, method='GET', query='', body=None, prefer='return=representation', count=False):
         if not self.enabled:
             raise SupabaseUnavailable()
         url = f'{self.base}/{table}' + (f'?{query}' if query else '')
@@ -93,6 +93,11 @@ class SupabaseStore:
                     raw = response.read(262145)
                     if len(raw) > 262144:
                         raise SupabaseUnavailable()
+                    if count:
+                        total = response.headers.get('Content-Range', '').rsplit('/', 1)[-1]
+                        if not total.isdigit():
+                            raise SupabaseUnavailable()
+                        return int(total)
                     return json.loads(raw) if raw else []
             except SupabaseUnavailable:
                 raise
@@ -111,6 +116,9 @@ class SupabaseStore:
                 logging.getLogger(__name__).warning('supabase_failure method=%s reason=invalid_header_or_response', method)
                 raise SupabaseUnavailable('invalid_header_or_response') from None
 
+    def count(self, table, query=''):
+        return self.request(table, query='select=id&limit=0' + query, prefer='count=exact', count=True)
+
     def save_assessment(self, session, answers, report):
         assessment_id = self.session_id(session)
         insight = compact_insight(report)
@@ -120,7 +128,7 @@ class SupabaseStore:
         if current:
             step = current[0].get('current_step') or 'started'
             rows = self.request('assessments', 'PATCH', 'id=eq.' + filter_value(assessment_id), {
-                'answers': answers,
+                **({'answers': answers} if answers else {}),
                 'insight': insight,
                 'full_report': packed_report,
                 'current_step': 'completed' if step == 'started' else step,

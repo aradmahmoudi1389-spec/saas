@@ -543,13 +543,14 @@ class ConsultationTests(unittest.TestCase):
             self.assertEqual(self.call('POST','/api/admin/consultation-status',{'requestId':1,'status':'confirmed','csrf':csrf},admin)[0],403)
         unverified, _ = self.staff(verified=False)
         self.assertEqual(self.call('GET','/api/admin/consultations',cookie=unverified)[0],401)
-        self.assertEqual(self.call('GET','/admin',cookie=unverified)[0],404)
+        self.assertEqual(self.call('GET','/admin',cookie=unverified)[0],303)
         for role in ('owner','support'):
             admin, csrf = self.staff(role)
             status, data, _ = self.call('GET','/api/admin/consultations',cookie=admin)
             self.assertEqual(status,200)
             self.assertEqual(data['requests'][0]['phone'],'09121234567')
-            self.assertEqual(self.call('GET','/admin',cookie=admin)[0],200)
+            self.assertEqual(self.call('GET','/admin/consultations',cookie=admin)[0],200)
+            self.assertEqual(self.call('GET','/admin',cookie=admin)[0],200 if role == 'owner' else 403)
             self.assertEqual(self.call('POST','/api/admin/consultation-status',{'requestId':1,'status':'confirmed','csrf':'wrong'},admin)[0],403)
         self.assertEqual(self.call('GET','/api/admin/consultations')[0],401)
 
@@ -716,6 +717,13 @@ class EndpointTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.http.shutdown(); cls.http.server_close(); cls.thread.join()
 
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory(dir=Path(__file__).parent)
+        self.addCleanup(self.directory.cleanup)
+        db_patch = patch.object(server, 'DB', Path(self.directory.name) / 'endpoint.sqlite')
+        db_patch.start()
+        self.addCleanup(db_patch.stop)
+
     def request(self, method, path, body=None, headers=None):
         connection = HTTPConnection('127.0.0.1', self.port, timeout=5)
         connection.request(method, path, body=body, headers=headers or {})
@@ -738,7 +746,7 @@ class EndpointTests(unittest.TestCase):
 
     def test_analysis_response_never_waits_for_supabase(self):
         headers = {'X-Forwarded-Proto': 'https', 'Origin': f'https://127.0.0.1:{self.port}', 'Content-Type': 'application/json'}
-        with patch.object(analysis, 'configured', return_value=True), patch.object(server.Handler, 'supabase', side_effect=AssertionError('Storage must be separate')) as external, patch.object(server.Handler, 'assessment_session', return_value='test-session'), patch.object(analysis, 'analyze', return_value=sample_report()), patch.object(server, 'connect'):
+        with patch.object(analysis, 'configured', return_value=True), patch.object(server.Handler, 'supabase', side_effect=AssertionError('Storage must be separate')) as external, patch.object(server.Handler, 'assessment_session', return_value='test-session'), patch.object(analysis, 'analyze', return_value=sample_report()):
             status, data, _ = self.request('POST', '/api/assessment/analyze', json.dumps(sample_answers()), headers)
             self.assertEqual(status, 200)
             self.assertEqual(data['report'], sample_report())
@@ -762,8 +770,7 @@ class EndpointTests(unittest.TestCase):
             self.assertEqual(status, 422)
             self.assertIn('Path=/api/;', result_headers['Set-Cookie'])
             headers['Cookie'] = cookie.split(';')[0]
-            with patch.object(analysis, 'analyze', return_value=sample_report()), patch.object(server.Handler, 'assessment_session', return_value=cookie.split('=', 1)[1]), patch.object(server, 'connect') as connect:
-                connect.return_value.__enter__.return_value = object()
+            with patch.object(analysis, 'analyze', return_value=sample_report()), patch.object(server.Handler, 'assessment_session', return_value=cookie.split('=', 1)[1]):
                 status, data, _ = self.request('POST', '/api/assessment/analyze', json.dumps(sample_answers()), headers)
                 self.assertEqual(status, 200); self.assertEqual(len(data['report']['priority_actions']), 3)
             status, _, _ = self.request('POST', '/api/assessment/analyze', '{"answers":{}}', headers)

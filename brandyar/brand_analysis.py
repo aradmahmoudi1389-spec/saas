@@ -147,13 +147,20 @@ class NoRedirect(HTTPRedirectHandler):
         return None
 
 
-def generate_report(answers):
+def generate_report(answers, prompt_body=None):
     key = os.environ.get('BRANDYAR_METIS_API_KEY', '').strip()
     if not key:
         raise AnalysisError(503, 'تحلیل هوشمند هنوز فعال نشده است. پاسخ‌های شما حفظ شده‌اند.')
+    system_prompt = SYSTEM_INSTRUCTION
+    user_prompt = json.dumps({'assessment_answers': answers}, ensure_ascii=False)
+    if prompt_body is not None:
+        import admin_workspace
+        admin_workspace.validate_document('prompts', prompt_body)
+        system_prompt = prompt_body['system_prompt'] + '\n' + SYSTEM_INSTRUCTION
+        user_prompt = admin_workspace.render_prompt(prompt_body, answers)
     payload = {'model': MODEL, 'max_tokens': 4000, 'messages': [
-        {'role': 'system', 'content': SYSTEM_INSTRUCTION},
-        {'role': 'user', 'content': json.dumps({'assessment_answers': answers}, ensure_ascii=False)},
+        {'role': 'system', 'content': system_prompt},
+        {'role': 'user', 'content': user_prompt},
     ]}
     request = Request(ENDPOINT, data=json.dumps(payload).encode(), headers={'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key}, method='POST')
     stage = 'connection'
@@ -195,10 +202,11 @@ def initialize(db):
     ''')
 
 
-def analyze(db, session, source, answers):
+def analyze(db, session, source, answers, prompt_body=None):
     initialize(db)
     now = int(time.time())
-    fingerprint = hashlib.sha256(json.dumps(answers, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    fingerprint_input = {'answers': answers, 'prompt': prompt_body} if prompt_body is not None else answers
+    fingerprint = hashlib.sha256(json.dumps(fingerprint_input, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     session_hash = hashlib.sha256(session.encode()).hexdigest()
     source_hash = hashlib.sha256(source.encode()).hexdigest()
     db.execute('BEGIN IMMEDIATE')
@@ -229,7 +237,7 @@ def analyze(db, session, source, answers):
         db.rollback()
         raise
     try:
-        report = generate_report(answers)
+        report = generate_report(answers, prompt_body=prompt_body) if prompt_body is not None else generate_report(answers)
         db.execute("UPDATE assessment_jobs SET state='ready',report=? WHERE session_hash=? AND fingerprint=?", (json.dumps(report, ensure_ascii=False), session_hash, fingerprint))
         db.execute("UPDATE assessment_attempts SET state='ready' WHERE id=?", (attempt,))
         db.commit()

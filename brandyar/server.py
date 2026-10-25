@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo
 
 import brand_analysis
 import supabase_store
+import admin_workspace
 
 ASSESSMENT_COOKIE_KEY = secrets.token_bytes(32)
 ASSESSMENT_LEAD_ROLES = {'owner', 'support'}
@@ -29,7 +30,7 @@ CONSULTATION_ADMIN_ROLES = {'owner', 'support'}
 
 ROOT = Path(__file__).resolve().parent
 DB = Path(os.environ.get('BRANDYAR_DB', str(ROOT / '.data' / 'brandyar.sqlite3')))
-ROLES = {'owner', 'product', 'support', 'finance', 'viewer'}
+ROLES = {'owner', 'product', 'support', 'finance', 'viewer'} | set(admin_workspace.PERMISSIONS)
 SECTIONS = {
     'owner': ('summary', 'users', 'tickets', 'plans', 'invoices', 'discounts', 'changes', 'features', 'funnel', 'churn', 'ai', 'integrations', 'sessions', 'audit'),
     'product': ('summary', 'users', 'changes', 'features', 'funnel', 'churn', 'ai', 'integrations'),
@@ -78,6 +79,7 @@ def connect():
                 db.execute("CREATE UNIQUE INDEX consultation_active_phone ON consultation_requests(phone) WHERE status IN ('pending','confirmed')")
                 db.execute("CREATE UNIQUE INDEX consultation_active_slot ON consultation_requests(slot_id) WHERE status IN ('pending','confirmed')")
                 db.execute('CREATE INDEX consultation_requests_lookup ON consultation_requests(status,created_at)')
+    admin_workspace.initialize(db)
     return db
 
 
@@ -220,6 +222,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(503, {'error': 'ذخیره‌سازی سرور هنوز فعال نشده است. لطفاً بعداً دوباره تلاش کن.'})
         try:
             assessment_id = store.save_assessment(self.assessment_session(), answers, report)
+            try:
+                with connect() as db:
+                    admin_workspace.event(db, assessment_id, 'assessment_stored')
+            except sqlite3.Error:
+                logging.getLogger(__name__).warning('event_tracking_failure event=assessment_stored')
             return self.json(200, {'assessment_id': assessment_id})
         except supabase_store.SupabaseUnavailable:
             logging.getLogger(__name__).warning('database_failure table=assessments')
@@ -374,7 +381,10 @@ class Handler(BaseHTTPRequestHandler):
                 if not report:
                     return self.json(403, {'error': 'ابتدا ارزیابی را کامل کن تا گزارش آماده شود.'})
                 try:
-                    record['store'].save_assessment(record['cookie'], {}, report)
+                    with connect() as db:
+                        snapshot = db.execute('SELECT answers_json FROM admin_assessment_snapshots WHERE assessment_id=?', (record['id'],)).fetchone()
+                    answers = json.loads(snapshot['answers_json']) if snapshot else {}
+                    record['store'].save_assessment(record['cookie'], answers, report)
                     ready = True
                 except supabase_store.SupabaseUnavailable:
                     logging.getLogger(__name__).warning('database_failure table=assessments')
@@ -392,6 +402,11 @@ class Handler(BaseHTTPRequestHandler):
                 except supabase_store.SupabaseUnavailable:
                     logging.getLogger(__name__).warning('database_failure table=leads')
                     return self.json(503, {'error': 'ثبت لید انجام نشد. لطفاً دوباره تلاش کن.'})
+                try:
+                    with connect() as db:
+                        admin_workspace.event(db, record['id'], 'lead_registered')
+                except sqlite3.Error:
+                    logging.getLogger(__name__).warning('event_tracking_failure event=lead_registered')
                 return self.json(200, {'registered': True, 'lead_id': lead_id, 'report_unlocked': True})
             return self.json(200, {'registered': registered})
         try:
@@ -538,6 +553,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(403, {'error': 'این بخش برای نقش شما مجاز نیست یا اتصال امن برقرار نیست.'})
         try:
             rows = store.request('leads', 'GET', 'select=id,mobile,consent_follow_up,source_page,source_campaign,status,created_at&order=created_at.desc&limit=200', prefer='return=minimal')
+            for row in rows:
+                row['mobile'] = admin_workspace.masked(row.get('mobile'))
             return self.json(200, {'leads': rows})
         except supabase_store.SupabaseUnavailable:
             logging.getLogger(__name__).warning('database_failure table=leads')
@@ -581,7 +598,19 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(422, {'error': 'پاسخ‌های ارزیابی کامل یا معتبر نیستند. لطفاً آن‌ها را بررسی کن.'}, headers)
         try:
             with connect() as db:
-                report = brand_analysis.analyze(db, session, self.assessment_source(), answers)
+                prompt_id, prompt_body = admin_workspace.active_prompt(db)
+                assessment_id = supabase_store.SupabaseStore.session_id(session)
+                admin_workspace.event(db, assessment_id, 'analysis_started', prompt_id)
+                db.commit()
+                try:
+                    report = brand_analysis.analyze(db, session, self.assessment_source(), answers, prompt_body=prompt_body) if prompt_body else brand_analysis.analyze(db, session, self.assessment_source(), answers)
+                except brand_analysis.AnalysisError:
+                    admin_workspace.event(db, assessment_id, 'analysis_failed', prompt_id)
+                    db.commit()
+                    raise
+                db.execute('INSERT OR IGNORE INTO admin_assessment_snapshots VALUES(?,?,?,?,?)', (assessment_id, json.dumps(brand_analysis.QUESTIONS, ensure_ascii=False), json.dumps(answers, ensure_ascii=False), prompt_id, int(time.time())))
+                db.execute('INSERT INTO admin_assessment_results VALUES(?,?,?,?,?,?)', (str(admin_workspace.uuid.uuid4()), assessment_id, prompt_id, json.dumps(report, ensure_ascii=False), int(time.time()), json.dumps({'answers': answers, 'questions': brand_analysis.QUESTIONS, 'test_version': 'legacy-v1'}, ensure_ascii=False)))
+                admin_workspace.event(db, assessment_id, 'analysis_ready', prompt_id)
             return self.json(200, {'report': report, 'session_id': session}, headers)
         except brand_analysis.AnalysisError as error:
             return self.json(error.status, {'error': error.message}, headers)
@@ -596,6 +625,27 @@ class Handler(BaseHTTPRequestHandler):
             return self.assessment_lead()
         if path == '/api/assessment/consultation':
             return self.consultation_dispatch()
+        if path == '/api/admin/workspace':
+            with connect() as db:
+                return admin_workspace.dispatch(self, db, self.session(db))
+        if path in {'/admin/login', '/admin/workspace.js', '/admin/workspace.css'} or path == '/admin' or path.startswith('/admin/'):
+            with connect() as db:
+                staff = self.session(db)
+                if path == '/admin/login':
+                    file = ROOT / 'admin-login.html'
+                elif path in {'/admin/workspace.js', '/admin/workspace.css'}:
+                    file = ROOT / ('admin-workspace.js' if path.endswith('.js') else 'admin-workspace.css')
+                elif not staff:
+                    return self.respond(303, content_type='text/html; charset=utf-8', headers={'Location': '/admin/login'})
+                elif path == '/admin/consultations':
+                    file = ROOT / 'admin.html'
+                elif path == '/admin' or path[7:] in admin_workspace.MODULES:
+                    if staff['role'] not in admin_workspace.PERMISSIONS or (path != '/admin' and not admin_workspace.allowed(staff['role'], path[7:])):
+                        return self.json(403, {'error': 'مجوز این بخش را ندارید.'})
+                    file = ROOT / 'admin-workspace.html'
+                else:
+                    return self.json(404, {'error': 'صفحه پیدا نشد.'})
+                return self.respond(200, file.read_bytes(), {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8'}[file.suffix])
         public = {'/', '/index.html', '/styles.css', '/typography.css', '/app.js', '/logo.jpg'}
         is_font = path.startswith('/fonts/') and path.endswith('.woff2') and '..' not in path
         with connect() as db:
@@ -612,7 +662,7 @@ class Handler(BaseHTTPRequestHandler):
                 if path == '/api/admin/leads':
                     return self.admin_leads(staff)
                 if path == '/api/admin/data':
-                    permitted = SECTIONS[staff['role']]
+                    permitted = SECTIONS.get(staff['role'], ())
                     data = {key: [] for key in permitted if key != 'summary'}
                     if 'users' in permitted:
                         rows = db.execute('SELECT id,name,email,status,plan FROM users ORDER BY id DESC LIMIT 50').fetchall()
@@ -646,6 +696,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.lead_record()
         if path == '/api/assessment/consultation':
             return self.consultation_dispatch(write=True)
+        if path == '/api/admin/workspace':
+            with connect() as db:
+                return admin_workspace.dispatch(self, db, self.session(db), write=True)
         if not self.safe_origin():
             return self.json(403, {'error': 'Forbidden'})
         try:
@@ -661,22 +714,15 @@ class Handler(BaseHTTPRequestHandler):
                 store, target_id = self.supabase(), data.get('id')
                 if not store or not isinstance(target_id, str) or not supabase_store.is_id(target_id):
                     return self.json(422, {'error': 'شناسهٔ درخواستی معتبر نیست.'})
+                if data.get('confirmed') is not True or not admin_workspace.allowed(staff['role'], 'archive'):
+                    return self.json(403, {'error': 'آرشیو نیازمند مجوز و تأیید نهایی است؛ از پنل جدید استفاده کنید.'})
+                section = 'assessments' if path.endswith('assessments') else 'customers'
                 try:
-                    if path == '/api/admin/assessments':
-                        store.request('assessments', 'PATCH', 'lead_id=eq.' + supabase_store.filter_value(target_id), {'lead_id': None}, 'return=minimal')
-                        removed = store.request('assessments', 'DELETE', 'id=eq.' + supabase_store.filter_value(target_id), prefer='return=representation')
-                        action = 'assessment_delete'
-                    else:
-                        store.request('assessments', 'PATCH', 'lead_id=eq.' + supabase_store.filter_value(target_id), {'lead_id': None}, 'return=minimal')
-                        removed = store.request('leads', 'DELETE', 'id=eq.' + supabase_store.filter_value(target_id), prefer='return=representation')
-                        action = 'lead_delete'
-                except supabase_store.SupabaseUnavailable:
-                    logging.getLogger(__name__).warning('database_failure table=%s', 'assessments' if path.endswith('assessments') else 'leads')
-                    return self.json(503, {'error': 'حذف انجام نشد. لطفاً دوباره تلاش کن.'})
-                if not removed:
-                    return self.json(404, {'error': 'رکوردی پیدا نشد.'})
-                self.audit_consultation(db, staff, f'{action}:{target_id}', 'success')
-                return self.json(200, {'status': 'deleted'})
+                    status, result = admin_workspace.mutate(db, staff, store, {'action': 'archive', 'section': section, 'id': target_id, 'confirmed': True})
+                    return self.json(status, result)
+                except (admin_workspace.Invalid, supabase_store.SupabaseUnavailable):
+                    db.rollback()
+                    return self.json(503, {'error': 'آرشیو انجام نشد؛ دوباره تلاش کنید.'})
             if path.startswith('/api/admin/consultation'):
                 staff = self.session(db)
                 if not self.assessment_https() or not staff or staff['role'] not in CONSULTATION_ADMIN_ROLES or not hmac.compare_digest(str(data.get('csrf', '')), staff['csrf']):
@@ -773,6 +819,7 @@ class Handler(BaseHTTPRequestHandler):
                 db.execute('DELETE FROM sessions WHERE token_hash=?', (staff['token_hash'],))
                 db.execute('INSERT INTO sessions VALUES(?,?,?,?,?,?,?)', (hashlib.sha256(token.encode()).hexdigest(), staff['staff_id'], secrets.token_hex(32), 1, now, now, now + 28800))
                 db.execute('INSERT INTO audit(staff_id,action,result,at) VALUES(?,?,?,?)', (staff['staff_id'], 'login', 'success', now))
+                admin_workspace.audit(db, staff, 'login', 'staff', str(staff['staff_id']))
                 db.commit()
                 return self.json(200, {'authenticated': True}, {'Set-Cookie': self.cookie(token)})
             if path == '/api/admin/logout':
@@ -782,6 +829,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not hmac.compare_digest(str(data.get('csrf', '')), staff['csrf']):
                     return self.json(403, {'error': 'Forbidden'})
                 db.execute('DELETE FROM sessions WHERE token_hash=?', (staff['token_hash'],))
+                admin_workspace.audit(db, staff, 'logout', 'staff', str(staff['staff_id']))
                 db.commit()
                 return self.json(200, {'status': 'success'}, {'Set-Cookie': self.cookie('', 0)})
             return self.json(404, {'error': 'Not found'})

@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light"><title>میز مدیریت نشارو</title><link rel="stylesheet" href="/admin/workspace.css"><script src="/admin/workspace.js" defer></script></head>
+<body>
+<a class="skip" href="#workspace">رفتن به محتوای اصلی</a>
+<div class="shell">
+<aside id="sidebar"><a class="brand" href="/admin"><span class="brand-mark">نـ</span><span>نشارو<small>میز مدیریت محصول</small></span></a><div class="side-label">فضای مدیریت</div><nav id="navigation" aria-label="بخش‌های مدیریت"></nav><footer><a href="/">بازگشت به سایت ↗</a><p>دسترسی محدود · ارتباط امن</p></footer></aside>
+<div class="main-shell"><header class="topbar"><button id="menu-toggle" class="icon-button" aria-controls="sidebar" aria-expanded="false" aria-label="باز و بسته کردن منو">☰</button><span class="workspace-name">نشارو <span class="divider">/</span> مدیریت</span><div class="account"><span id="principal">در حال بررسی نشست…</span><button id="logout" class="quiet">خروج</button></div></header>
+<main id="workspace" tabindex="-1"><div class="breadcrumb" id="breadcrumb">مدیریت / نمای کلی</div><div class="page-heading"><div><p class="eyebrow">مدیریت آگاهانه، بر پایهٔ دادهٔ واقعی</p><h1 id="page-title">میز مدیریت نشارو</h1><p id="page-description" class="muted">اطلاعات مشتری، مسیر ارزیابی و عملیات محصول در یک فضای یکپارچه.</p></div><button id="refresh" class="secondary">به‌روزرسانی</button></div>
+<div class="toolbar"><label>بازهٔ زمانی<select id="period"><option value="1">۲۴ ساعت اخیر</option><option value="7">۷ روز اخیر</option><option value="30" selected>۳۰ روز اخیر</option><option value="custom">بازهٔ دلخواه</option></select></label><label id="from-label" hidden>از تاریخ<input id="date-from" type="date"></label><label id="to-label" hidden>تا تاریخ<input id="date-to" type="date"></label><label class="search-label">جست‌وجو در فهرست دریافت‌شده<input id="search" type="search" placeholder="شناسه، وضعیت یا نام…" autocomplete="off"></label><span id="source" class="source-tag">دادهٔ واقعی · بدون نمونه‌سازی</span></div>
+<p id="feedback" role="status" aria-live="polite"></p><section id="content" aria-busy="true"><div class="empty"><span class="empty-icon">◌</span><h2>در حال دریافت اطلاعات</h2><p>نشست و مجوزهای شما بررسی می‌شود.</p></div></section>
+<footer class="page-footer"><span>نشارو · میز مدیریت</span><span>اطلاعات شخصی فقط در محدودهٔ مجوز شما نمایش داده می‌شود.</span></footer></main></div></div>
+<dialog id="confirmation" aria-labelledby="confirmation-title"><h2 id="confirmation-title">تأیید عملیات</h2><p id="confirmation-copy"></p><label class="check"><input type="checkbox" id="confirm-check"> اثر این عملیات را می‌دانم و تأیید می‌کنم.</label><div class="actions"><button id="confirm-yes" disabled>تأیید نهایی</button><button id="confirm-no" class="secondary">انصراف</button></div></dialog>
+</body></html>
