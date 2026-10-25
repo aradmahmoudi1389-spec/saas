@@ -747,8 +747,9 @@ class EndpointTests(unittest.TestCase):
             self.assertTrue(data['ready'])
             cookie = result_headers['Set-Cookie']
             self.assertIn('HttpOnly; Secure; SameSite=Strict', cookie)
-            status, _, _ = self.request('POST', '/api/assessment/analyze', '{}', headers)
-            self.assertEqual(status, 401)
+            status, _, result_headers = self.request('POST', '/api/assessment/analyze', '{}', headers)
+            self.assertEqual(status, 422)
+            self.assertIn('Path=/api/;', result_headers['Set-Cookie'])
             headers['Cookie'] = cookie.split(';')[0]
             with patch.object(analysis, 'analyze', return_value=sample_report()), patch.object(server, 'connect') as connect:
                 connect.return_value.__enter__.return_value = object()

@@ -514,6 +514,11 @@ class Handler(BaseHTTPRequestHandler):
     def audit_consultation(self, db, staff, action, result):
         db.execute('INSERT INTO audit(staff_id,action,result,at) VALUES(?,?,?,?)', (staff['staff_id'], action, result, int(time.time())))
 
+    def new_assessment_session(self):
+        value = f'{int(time.time())}.{secrets.token_hex(32)}'
+        signature = hmac.new(ASSESSMENT_COOKIE_KEY, value.encode(), hashlib.sha256).hexdigest()
+        return value + '.' + signature, f'brandyassessment={value}.{signature}; HttpOnly; Secure; SameSite=Strict; Path=/api/; Max-Age=3600'
+
     def assessment_status(self):
         if not self.assessment_https():
             return self.json(200, {'ready': False, 'error': 'ارسال تحلیل تا فعال‌شدن اتصال امن سایت در دسترس نیست. پاسخ‌های شما حفظ می‌شوند.'})
@@ -521,9 +526,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(200, {'ready': False, 'error': 'تحلیل هوشمند هنوز فعال نشده است. پاسخ‌های شما حفظ می‌شوند.'})
         headers = {}
         if not self.assessment_session():
-            value = f'{int(time.time())}.{secrets.token_hex(32)}'
-            signature = hmac.new(ASSESSMENT_COOKIE_KEY, value.encode(), hashlib.sha256).hexdigest()
-            headers['Set-Cookie'] = f'brandyassessment={value}.{signature}; HttpOnly; Secure; SameSite=Strict; Path=/api/; Max-Age=3600'
+            _, headers['Set-Cookie'] = self.new_assessment_session()
         return self.json(200, {'ready': True}, headers)
 
     def assessment_analyze(self):
@@ -534,20 +537,21 @@ class Handler(BaseHTTPRequestHandler):
         if not brand_analysis.configured():
             return self.json(503, {'error': 'تحلیل هوشمند هنوز فعال نشده است. پاسخ‌های شما حفظ شده‌اند.'})
         session = self.assessment_session()
+        headers = {}
         if not session:
-            return self.json(401, {'error': 'جلسهٔ ارزیابی معتبر نیست. دوباره تلاش کن.'})
+            session, headers['Set-Cookie'] = self.new_assessment_session()
         try:
             answers = brand_analysis.validate_answers(self.request_data(16384, brand_analysis.parse_json))
         except (ValueError, UnicodeError, RecursionError):
-            return self.json(422, {'error': 'پاسخ‌های ارزیابی کامل یا معتبر نیستند. لطفاً آن‌ها را بررسی کن.'})
+            return self.json(422, {'error': 'پاسخ‌های ارزیابی کامل یا معتبر نیستند. لطفاً آن‌ها را بررسی کن.'}, headers)
         try:
             with connect() as db:
                 report = brand_analysis.analyze(db, session, self.assessment_source(), answers)
-            return self.json(200, {'report': report})
+            return self.json(200, {'report': report}, headers)
         except brand_analysis.AnalysisError as error:
-            return self.json(error.status, {'error': error.message})
+            return self.json(error.status, {'error': error.message}, headers)
         except (sqlite3.Error, ValueError, TypeError):
-            return self.json(503, {'error': brand_analysis.ERROR})
+            return self.json(503, {'error': brand_analysis.ERROR}, headers)
 
     def do_GET(self):
         path = urlsplit(self.path).path
