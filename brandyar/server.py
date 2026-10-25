@@ -332,6 +332,19 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError('شمارهٔ موبایل را کامل وارد کن.')
         return digits
 
+    def cached_assessment_report(self, session_hash):
+        try:
+            with connect() as db:
+                rows = db.execute("SELECT report FROM assessment_jobs WHERE session_hash=? AND state='ready' AND created>? ORDER BY created DESC", (session_hash, int(time.time()) - 3600)).fetchall()
+        except sqlite3.Error:
+            return None
+        for row in rows:
+            try:
+                return brand_analysis.validate_report(brand_analysis.parse_json(row['report']))
+            except (ValueError, TypeError, KeyError):
+                continue
+        return None
+
     def consultation_ready(self, db, session_hash):
         if not session_hash or not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='assessment_jobs'").fetchone():
             return False
@@ -357,7 +370,15 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, TypeError):
                 ready, lead_id, registered = False, None, False
             if not ready:
-                return self.json(403, {'error': 'ابتدا ارزیابی را کامل کن تا گزارش آماده شود.'})
+                report = self.cached_assessment_report(session_hash) if write else None
+                if not report:
+                    return self.json(403, {'error': 'ابتدا ارزیابی را کامل کن تا گزارش آماده شود.'})
+                try:
+                    record['store'].save_assessment(record['cookie'], {}, report)
+                    ready = True
+                except supabase_store.SupabaseUnavailable:
+                    logging.getLogger(__name__).warning('database_failure table=assessments')
+                    return self.json(503, {'error': 'ذخیرهٔ ارزیابی انجام نشد. لطفاً دوباره تلاش کن.'})
             if write:
                 try:
                     data = self.request_data(512, brand_analysis.parse_json)

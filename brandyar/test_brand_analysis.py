@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from urllib.error import HTTPError, URLError
 
 import brand_analysis as analysis
@@ -413,6 +413,20 @@ class ConsultationTests(unittest.TestCase):
         self.assertTrue(all(status == 200 and data == {'registered': True} for status, data, _ in results))
         with server.connect() as db:
             self.assertEqual(db.execute('SELECT count(*) FROM assessment_leads').fetchone()[0], 1)
+
+    def test_report_lead_recovers_from_pending_supabase_assessment(self):
+        cookie = self.assessment()
+        token = cookie.split('=', 1)[1]
+        store = MagicMock()
+        store.session_id.return_value = 'assessment-id'
+        store.request.return_value = []
+        store.save_lead.return_value = 'lead-id'
+        with patch.object(server.Handler, 'supabase', return_value=store):
+            status, data, _ = self.call('POST', '/api/assessment/lead', {'phone':'09121234567','consent':True}, cookie)
+        self.assertEqual(status, 200)
+        self.assertTrue(data['registered'])
+        store.save_assessment.assert_called_once()
+        self.assertEqual(store.save_assessment.call_args.args[0], token)
 
     def test_report_lead_storage_failure_does_not_claim_success(self):
         cookie = self.assessment()
