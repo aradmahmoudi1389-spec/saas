@@ -20,6 +20,13 @@ def is_id(value):
     return isinstance(value, str) and re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', value) is not None
 
 
+def compact_insight(report):
+    return {
+        'summary': report['summary'][:180],
+        **{key: {'status': report[key]['status']} for key in ('positioning', 'content', 'trust')},
+    }
+
+
 def pack_report(report):
     raw = json.dumps(report, ensure_ascii=False, separators=(',', ':')).encode()
     return {
@@ -106,12 +113,7 @@ class SupabaseStore:
 
     def save_assessment(self, session, answers, report):
         assessment_id = self.session_id(session)
-        insight = {
-            'summary': report['summary'],
-            'positioning': report['positioning'],
-            'content': report['content'],
-            'trust': report['trust'],
-        }
+        insight = compact_insight(report)
         packed_report = pack_report(report)
         # Status only moves forward: a preview can be re-shown without losing an unlocked report.
         current = self.request('assessments', 'GET', 'session_id=eq.' + filter_value(assessment_id) + '&select=id,current_step', prefer='return=minimal')

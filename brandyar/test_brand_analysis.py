@@ -57,7 +57,9 @@ class SupabaseDiagnosticsTests(unittest.TestCase):
         assessment_id = store.session_id('test-session')
         with patch.object(store, 'request', side_effect=[[], [{'id': assessment_id}]]) as request:
             self.assertEqual(store.save_assessment('test-session', {}, report), assessment_id)
-        self.assertEqual(request.call_args_list[1].kwargs['body']['full_report'], packed)
+        body = request.call_args_list[1].kwargs['body']
+        self.assertEqual(body['full_report'], packed)
+        self.assertEqual(body['insight'], supabase_store.compact_insight(report))
 
     def test_failure_categories_never_log_private_values(self):
         import supabase_store
