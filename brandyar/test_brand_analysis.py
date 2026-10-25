@@ -96,6 +96,25 @@ class SchemaTests(unittest.TestCase):
                 if code == 402:
                     self.assertIn('اعتبار یا پرداخت', caught.exception.message)
 
+    def test_analysis_deadlines_leave_time_for_provider_response(self):
+        root = Path(__file__).parent
+        proxy = (root / 'nesharo.nginx.conf').read_text()
+        frontend = (root / 'app.js').read_text()
+        self.assertIn('proxy_read_timeout 100s;', proxy)
+        self.assertIn('controller.abort(), 105000)', frontend)
+
+    def test_provider_diagnostics_exclude_private_details(self):
+        with patch.dict('os.environ', {'BRANDYAR_METIS_API_KEY': 'unit-test-only'}), patch.object(analysis, 'build_opener') as opener:
+            for error in (HTTPError(analysis.ENDPOINT, 400, 'private provider details', {}, None), URLError('private provider details'), TimeoutError('private provider details')):
+                opener.return_value.open.side_effect = error
+                with self.assertLogs('brand_analysis', level='WARNING') as logs, self.assertRaises(analysis.AnalysisError) as caught:
+                    analysis.generate_report({'private-answer': 'private answer details'})
+                output = ' '.join(logs.output)
+                self.assertIn('assessment_failure stage=', output)
+                self.assertNotIn('private', output)
+                self.assertNotIn('unit-test-only', output)
+                self.assertEqual(caught.exception.message, analysis.ERROR)
+
     def test_provider_contract_and_failures(self):
         envelope = {'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps(sample_report())}}]}
         with patch.dict('os.environ', {'BRANDYAR_METIS_API_KEY': 'unit-test-only'}), patch.object(analysis, 'build_opener') as opener:
@@ -106,7 +125,8 @@ class SchemaTests(unittest.TestCase):
             request = opener.return_value.open.call_args.args[0]
             self.assertEqual(request.full_url, analysis.ENDPOINT)
             payload = json.loads(request.data)
-            self.assertEqual(payload['model'], 'grok-4-fast')
+            self.assertEqual(payload['model'], 'grok-4.6')
+            self.assertEqual(opener.return_value.open.call_args.kwargs['timeout'], 90)
             self.assertEqual(payload['messages'][0]['role'], 'system')
             self.assertEqual(payload['messages'][1]['role'], 'user')
             response.read.return_value = b'{"choices": []}'
@@ -203,7 +223,7 @@ class StorageTests(unittest.TestCase):
     def test_stale_reservations_are_released(self):
         with self.database() as db, patch.object(analysis, 'generate_report', return_value=sample_report()), patch.object(analysis.time, 'time', return_value=10000):
             source_hash = analysis.hashlib.sha256(b'source').hexdigest()
-            db.executemany("INSERT INTO assessment_attempts(source_hash,at,state) VALUES(?,?,'processing')", [(source_hash, 9900)] * 3)
+            db.executemany("INSERT INTO assessment_attempts(source_hash,at,state) VALUES(?,?,'processing')", [(source_hash, 9870)] * 3)
             db.commit()
             self.assertEqual(analysis.analyze(db, 'session', 'source', self.answers), sample_report())
             self.assertEqual(db.execute("SELECT count(*) FROM assessment_attempts WHERE state='failed'").fetchone()[0], 3)
@@ -211,7 +231,7 @@ class StorageTests(unittest.TestCase):
     def test_processing_reservations_enforce_limits(self):
         with self.database() as db, patch.object(analysis, 'generate_report') as generate, patch.object(analysis.time, 'time', return_value=10000):
             source_hash = analysis.hashlib.sha256(b'source').hexdigest()
-            db.executemany("INSERT INTO assessment_attempts(source_hash,at,state) VALUES(?,?,'processing')", [(source_hash, 9980)] * 3)
+            db.executemany("INSERT INTO assessment_attempts(source_hash,at,state) VALUES(?,?,'processing')", [(source_hash, 9900)] * 3)
             db.commit()
             with self.assertRaises(analysis.AnalysisError) as caught:
                 analysis.analyze(db, 'session', 'source', self.answers)

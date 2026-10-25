@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import os
 import re
 import time
@@ -9,7 +10,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 QUESTIONS = json.loads(Path(__file__).with_name('assessment_questions.json').read_text())
 ENDPOINT = 'https://api.metisai.ir/api/v1/wrapper/grok/chat/completions'
-MODEL = 'grok-4-fast'
+MODEL = 'grok-4.6'
 DISCLAIMER = 'این تحلیل فقط بر اساس پاسخ‌های خوداظهاری شماست؛ پیج، آمار و محتوای بیرونی بررسی نشده‌اند و نتیجه‌ای تضمین نمی‌شود.'
 ERROR = 'تحلیل الان کامل نشد. لطفاً دوباره تلاش کن.'
 REPORT_SHAPE = {
@@ -155,22 +156,31 @@ def generate_report(answers):
         {'role': 'user', 'content': json.dumps({'assessment_answers': answers}, ensure_ascii=False)},
     ]}
     request = Request(ENDPOINT, data=json.dumps(payload).encode(), headers={'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key}, method='POST')
+    stage = 'connection'
     try:
-        with build_opener(NoRedirect()).open(request, timeout=45) as response:
+        with build_opener(NoRedirect()).open(request, timeout=90) as response:
+            stage = 'response_read'
             raw = response.read(65537)
             if len(raw) > 65536:
                 raise ValueError('Oversized response')
+        stage = 'response_envelope'
         envelope = parse_json(raw)
         choice = envelope['choices'][0]
         if choice.get('finish_reason') != 'stop':
             raise ValueError('Incomplete response')
+        stage = 'report_json'
         report = parse_json(choice['message']['content'])
+        stage = 'report_validation'
         return validate_report(report)
     except HTTPError as error:
+        logging.getLogger(__name__).warning('assessment_failure stage=provider_http code=%s', error.code)
         if error.code == 402:
             raise AnalysisError(503, 'سرویس تحلیل به‌دلیل مشکل اعتبار یا پرداخت موقتاً در دسترس نیست. پاسخ‌های شما حفظ شده‌اند؛ لطفاً پس از رفع مشکل دوباره تلاش کنید.') from None
         raise AnalysisError() from None
-    except (URLError, TimeoutError, OSError, ValueError, KeyError, IndexError, TypeError, RecursionError):
+    except (URLError, TimeoutError, OSError, ValueError, KeyError, IndexError, TypeError, RecursionError) as error:
+        reasons = {'Oversized response', 'Incomplete response', 'Duplicate key', 'Invalid constant', 'Invalid fields', 'Invalid text', 'Unsafe format', 'Unsupported claim', 'Invalid list', 'Invalid actions'}
+        reason = str(error) if type(error) is ValueError and str(error) in reasons else type(error).__name__
+        logging.getLogger(__name__).warning('assessment_failure stage=%s reason=%s', stage, reason)
         raise AnalysisError() from None
 
 
@@ -194,8 +204,8 @@ def analyze(db, session, source, answers):
     db.execute('BEGIN IMMEDIATE')
     try:
         db.execute('DELETE FROM assessment_attempts WHERE at<?', (now - 86400,))
-        db.execute("UPDATE assessment_attempts SET state='failed' WHERE state='processing' AND at<?", (now - 90,))
-        db.execute("DELETE FROM assessment_jobs WHERE created<? OR (state='processing' AND created<?)", (now - 3600, now - 90))
+        db.execute("UPDATE assessment_attempts SET state='failed' WHERE state='processing' AND at<?", (now - 120,))
+        db.execute("DELETE FROM assessment_jobs WHERE created<? OR (state='processing' AND created<?)", (now - 3600, now - 120))
         prior = db.execute('SELECT * FROM assessment_jobs WHERE session_hash=? AND fingerprint=?', (session_hash, fingerprint)).fetchone()
         if prior:
             if prior['state'] == 'processing':
