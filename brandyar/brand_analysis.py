@@ -218,11 +218,9 @@ def analyze(db, session, source, answers):
             remaining = recent + 10 - now
             raise AnalysisError(429, f'لطفاً {remaining} ثانیه صبر کن و دوباره تلاش کن. پاسخ‌های شما حفظ شده‌اند.')
         in_progress = db.execute("SELECT count(*) FROM assessment_jobs WHERE state='processing'").fetchone()[0]
-        local_usage = db.execute("SELECT count(*) FROM assessment_attempts WHERE source_hash=? AND at>? AND state IN ('ready','processing')", (source_hash, now - 3600)).fetchone()[0]
+        source_processing = db.execute("SELECT count(*) FROM assessment_attempts WHERE source_hash=? AND at>? AND state='processing'", (source_hash, now - 3600)).fetchone()[0]
         global_usage = db.execute("SELECT count(*) FROM assessment_attempts WHERE at>? AND state IN ('ready','processing')", (now - 3600,)).fetchone()[0]
-        if local_usage >= 3:
-            raise AnalysisError(429, 'سقف ۳ تحلیل موفق در ساعت تکمیل شده است. لطفاً پس از آزادشدن سهمیه دوباره تلاش کن.')
-        if global_usage >= 100 or in_progress >= 4:
+        if source_processing >= 3 or global_usage >= 100 or in_progress >= 4:
             raise AnalysisError(429, 'سرویس تحلیل در حال حاضر شلوغ است. لطفاً کمی بعد دوباره تلاش کن.')
         db.execute('INSERT INTO assessment_jobs VALUES(?,?,?,?,NULL)', (session_hash, fingerprint, 'processing', now))
         attempt = db.execute("INSERT INTO assessment_attempts(source_hash,at,state) VALUES(?,?,'processing')", (source_hash, now)).lastrowid

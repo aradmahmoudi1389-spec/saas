@@ -196,21 +196,17 @@ class StorageTests(unittest.TestCase):
                 analysis.analyze(db, 'session', 'source', self.answers)
             self.assertEqual(caught.exception.status, 502)
 
-    def test_successful_hourly_quota_and_expiry(self):
+    def test_successful_hourly_usage_is_not_limited_per_source(self):
         with self.database() as db, patch.object(analysis, 'generate_report', return_value=sample_report()) as generate, patch.object(analysis.time, 'time', return_value=10000) as clock:
-            for index in range(3):
+            for index in range(4):
                 analysis.analyze(db, f'session-{index}', 'source', self.answers)
                 clock.return_value += 10
-            with self.assertRaises(analysis.AnalysisError) as caught:
-                analysis.analyze(db, 'fourth-session', 'source', self.answers)
-            self.assertEqual(caught.exception.status, 429)
-            self.assertIn('۳ تحلیل موفق', caught.exception.message)
-            self.assertEqual(generate.call_count, 3)
-            analysis.analyze(db, 'session-0', 'source', self.answers)
-            self.assertEqual(generate.call_count, 3)
-            clock.return_value = 13600
-            analysis.analyze(db, 'fourth-session', 'source', self.answers)
             self.assertEqual(generate.call_count, 4)
+            analysis.analyze(db, 'session-0', 'source', self.answers)
+            self.assertEqual(generate.call_count, 4)
+            clock.return_value = 13600
+            analysis.analyze(db, 'fifth-session', 'source', self.answers)
+            self.assertEqual(generate.call_count, 5)
 
     def test_legacy_failures_do_not_block_retry(self):
         with self.database() as db, patch.object(analysis, 'generate_report', return_value=sample_report()):
