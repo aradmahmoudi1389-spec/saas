@@ -65,7 +65,7 @@ function harness(saved=null) {
   assert.equal((markup.match(/<h1>/g)||[]).length,1);
   assert(markup.includes(report.summary));
   assert(markup.includes(report.strengths[0]));
-  assert(markup.indexOf('report-preview') < markup.indexOf('report-lead-form'));
+  assert(markup.indexOf('class="report-preview"') < markup.indexOf('<form id="report-lead-form"'));
   assert.equal((markup.match(/name="phone"/g)||[]).length,1);
   assert(!markup.includes('id="report-full"'));
   assert(!markup.includes(report.this_week_action.description));
@@ -210,7 +210,7 @@ function harness(saved=null) {
   releaseLead();await leadPending;
   assert.deepEqual(JSON.parse(lead.requests[0].options.body),{phone:'09121234567',consent:true});
   const fullReport=lead.run('reportPage()');
-  for(const heading of ['تصویر کلی برند شخصی تو','جایگاه تخصصی','محتوای متمایز','اعتماد مخاطب','مهم‌ترین فرصت رشد تو','مسیر پیشنهادی برای ساخت محتوا','قدم بعدی تو در این هفته','از تحلیل تا اقدام'])assert(fullReport.includes(heading));
+  for(const heading of ['تصویر کلی برند شخصی تو','جایگاه تخصصی','محتوای متمایز','اعتماد مخاطب','مهم‌ترین فرصت رشد تو','مسیر پیشنهادی برای ساخت محتوا','مأموریت تو در این هفته','از تحلیل تا اقدام'])assert(fullReport.includes(heading));
   assert(!fullReport.includes('name="phone"'));
   assert(fullReport.includes('href="#/app/plan"'));
   assert(fullReport.includes('assessment-download'));
