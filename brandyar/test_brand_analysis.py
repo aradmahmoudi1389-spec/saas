@@ -45,6 +45,25 @@ def sample_report():
     }
 
 
+class SupabaseDiagnosticsTests(unittest.TestCase):
+    def test_failure_categories_never_log_private_values(self):
+        import supabase_store
+        cases = [
+            (URLError(TimeoutError('private details')), 'transport_TimeoutError', 3),
+            (UnicodeEncodeError('latin-1', 'خصوصی', 0, 1, 'private details'), 'invalid_header_encoding', 1),
+            (ValueError('private header details'), 'invalid_header_or_response', 1),
+        ]
+        for error, expected, attempts in cases:
+            with self.subTest(expected=expected), patch.dict('os.environ', {'SUPABASE_URL': 'https://example.test', 'SUPABASE_SERVICE_ROLE_KEY': 'test-only'}), patch.object(supabase_store, 'urlopen', side_effect=error) as opener, patch.object(supabase_store.time, 'sleep'), self.assertLogs('supabase_store', level='WARNING') as logs:
+                with self.assertRaises(supabase_store.SupabaseUnavailable) as caught:
+                    supabase_store.SupabaseStore().request('assessments')
+                self.assertEqual(caught.exception.status, expected)
+                self.assertEqual(opener.call_count, attempts)
+                output = ' '.join(logs.output)
+                for private in ('private', 'خصوصی', 'test-only', 'example.test'):
+                    self.assertNotIn(private, output)
+
+
 class SchemaTests(unittest.TestCase):
     def test_both_branches_and_data_minimization(self):
         for service in (True, False):

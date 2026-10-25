@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 import time
@@ -68,10 +69,16 @@ class SupabaseStore:
                 raise SupabaseUnavailable(error.code) from error
             except (URLError, OSError) as error:
                 if attempt == 2:
-                    raise SupabaseUnavailable() from error
+                    reason = error.reason if isinstance(error, URLError) else error
+                    logging.getLogger(__name__).warning('supabase_failure method=%s reason=%s', method, type(reason).__name__)
+                    raise SupabaseUnavailable('transport_' + type(reason).__name__) from None
                 time.sleep(0.25)
-            except (ValueError, json.JSONDecodeError) as error:
-                raise SupabaseUnavailable() from error
+            except UnicodeError:
+                logging.getLogger(__name__).warning('supabase_failure method=%s reason=invalid_header_encoding', method)
+                raise SupabaseUnavailable('invalid_header_encoding') from None
+            except ValueError:
+                logging.getLogger(__name__).warning('supabase_failure method=%s reason=invalid_header_or_response', method)
+                raise SupabaseUnavailable('invalid_header_or_response') from None
 
     def save_assessment(self, session, answers, report):
         assessment_id = self.session_id(session)
