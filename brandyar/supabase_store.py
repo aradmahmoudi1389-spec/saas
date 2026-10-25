@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import time
 import uuid
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
@@ -54,16 +55,23 @@ class SupabaseStore:
             'Prefer': prefer,
         }
         request = Request(url, data=json.dumps(body, ensure_ascii=False).encode() if body is not None else None, headers=headers, method=method)
-        try:
-            with urlopen(request, timeout=10) as response:
-                raw = response.read(262145)
-                if len(raw) > 262144:
-                    raise SupabaseUnavailable()
-                return json.loads(raw) if raw else []
-        except HTTPError as error:
-            raise SupabaseUnavailable(error.code) from error
-        except (URLError, OSError, ValueError, json.JSONDecodeError) as error:
-            raise SupabaseUnavailable() from error
+        for attempt in range(3):
+            try:
+                with urlopen(request, timeout=10) as response:
+                    raw = response.read(262145)
+                    if len(raw) > 262144:
+                        raise SupabaseUnavailable()
+                    return json.loads(raw) if raw else []
+            except SupabaseUnavailable:
+                raise
+            except HTTPError as error:
+                raise SupabaseUnavailable(error.code) from error
+            except (URLError, OSError) as error:
+                if attempt == 2:
+                    raise SupabaseUnavailable() from error
+                time.sleep(0.25)
+            except (ValueError, json.JSONDecodeError) as error:
+                raise SupabaseUnavailable() from error
 
     def save_assessment(self, session, answers, report):
         assessment_id = self.session_id(session)
