@@ -5,6 +5,7 @@ import getpass
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
 import secrets
@@ -19,8 +20,10 @@ from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 import brand_analysis
+import supabase_store
 
 ASSESSMENT_COOKIE_KEY = secrets.token_bytes(32)
+ASSESSMENT_LEAD_ROLES = {'owner', 'support'}
 CONSULTATION_TIMEZONE = os.environ.get('BRANDYAR_TIMEZONE', 'Asia/Tehran')
 CONSULTATION_ADMIN_ROLES = {'owner', 'support'}
 
@@ -181,6 +184,68 @@ class Handler(BaseHTTPRequestHandler):
     def assessment_https(self):
         return isinstance(self.connection, ssl.SSLSocket) or (self.client_address[0] in ('127.0.0.1', '::1') and self.headers.get('X-Forwarded-Proto') == 'https')
 
+    def supabase(self):
+        store = supabase_store.SupabaseStore()
+        return store if store.enabled else None
+
+    def supabase_grace(self, session_hash):
+        # Right after analysis the Supabase copy may be briefly unavailable; the signed report cookie still backs readiness.
+        grace = self.headers.get('X-Nesharo-Supabase-Grace', '')
+        if not (self.assessment_https() and grace.isascii() and grace.isdigit() and 0 < len(grace) <= 3 and int(grace) <= 180):
+            return False
+        try:
+            with connect() as db:
+                return db.execute("SELECT 1 FROM assessment_jobs WHERE session_hash=? AND state='ready' AND created>?", (session_hash, int(time.time()) - int(grace))).fetchone() is not None
+        except sqlite3.Error:
+            return False
+
+    def source_tag(self, value):
+        return value if isinstance(value, str) and 0 < len(value) <= 96 and re.fullmatch(r'[A-Za-z0-9_\-./#?=&%:]+\Z', value) else None
+
+    def assessment_record(self):
+        if not self.assessment_https() or not self.safe_origin():
+            return self.json(403, {'error': 'این درخواست به اتصال امن و معتبر نیاز دارد.'})
+        if not self.assessment_session():
+            return self.json(401, {'error': 'نشست ارزیابی معتبر نیست. دوباره تلاش کن.'})
+        try:
+            data = self.request_data(16384, brand_analysis.parse_json)
+            report = brand_analysis.validate_report(brand_analysis.parse_json(json.dumps(data.get('insight'), ensure_ascii=False)))
+            answers = brand_analysis.validate_answers({'answers': data.get('answers'), 'consent': True})
+        except (ValueError, TypeError, UnicodeError, RecursionError):
+            return self.json(422, {'error': 'پاسخ‌ها یا بینش ارزیابی معتبر نیستند.'})
+        store = self.supabase()
+        if not store:
+            return self.json(503, {'error': 'ذخیره‌سازی سرور هنوز فعال نشده است. لطفاً بعداً دوباره تلاش کن.'})
+        try:
+            assessment_id = store.save_assessment(self.assessment_session(), answers, report)
+            return self.json(200, {'assessment_id': assessment_id})
+        except supabase_store.SupabaseUnavailable:
+            logging.getLogger(__name__).warning('database_failure table=assessments')
+            return self.json(503, {'error': 'ذخیرهٔ ارزیابی انجام نشد. لطفاً دوباره تلاش کن.'})
+
+    def lead_record(self):
+        if not self.assessment_https() or not self.safe_origin():
+            return self.json(403, {'error': 'این درخواست به اتصال امن و معتبر نیاز دارد.'})
+        if not self.assessment_session():
+            return self.json(401, {'error': 'نشست ارزیابی معتبر نیست. دوباره تلاش کن.'})
+        try:
+            data = self.request_data(1024, brand_analysis.parse_json)
+            if set(data) != {'assessment_id', 'mobile', 'consent_follow_up', 'source_page', 'source_campaign'} or data['consent_follow_up'] is not True:
+                raise ValueError()
+            store = self.supabase()
+            if not store or data['assessment_id'] != store.session_id(self.assessment_session()):
+                raise ValueError()
+            mobile = self.consultation_phone(data['mobile'])
+            source_page, source_campaign = self.source_tag(data['source_page']), self.source_tag(data['source_campaign'])
+        except (ValueError, TypeError, UnicodeError, RecursionError):
+            return self.json(422, {'error': 'اطلاعات فرم کامل یا معتبر نیست.'})
+        try:
+            lead_id = store.save_lead(data['assessment_id'], mobile, True, source_page, source_campaign)
+            return self.json(200, {'lead_id': lead_id, 'report_unlocked': True})
+        except supabase_store.SupabaseUnavailable:
+            logging.getLogger(__name__).warning('database_failure table=leads')
+            return self.json(503, {'error': 'ثبت لید انجام نشد. لطفاً دوباره تلاش کن.'})
+
     def assessment_source(self):
         peer = self.client_address[0]
         if peer in ('127.0.0.1', '::1'):
@@ -205,6 +270,27 @@ class Handler(BaseHTTPRequestHandler):
     def consultation_session_hash(self):
         value = self.assessment_session()
         return hashlib.sha256(value.encode()).hexdigest() if value else None
+
+    def supabase_assessment(self):
+        cookie = self.assessment_session()
+        store = self.supabase()
+        if not cookie or not store:
+            return None
+        return {'cookie': cookie, 'store': store, 'id': store.session_id(cookie)}
+
+    def supabase_report_ready(self, record):
+        try:
+            rows = record['store'].request('assessments', 'GET', 'id=eq.' + supabase_store.filter_value(record['id']) + '&select=id,lead_id,current_step,full_report', prefer='return=minimal')
+        except supabase_store.SupabaseUnavailable:
+            return bool(self.supabase_grace(hashlib.sha256(record['cookie'].encode()).hexdigest())), None, False
+        if not rows or not isinstance(rows[0].get('full_report'), dict):
+            return False, None, False
+        try:
+            brand_analysis.validate_report(rows[0]['full_report'])
+        except (ValueError, TypeError, KeyError):
+            return False, None, False
+        lead_id = rows[0].get('lead_id')
+        return True, (lead_id if isinstance(lead_id, str) and len(lead_id) <= 64 else None), lead_id is not None
 
     def consultation_slot(self, row):
         return {'id': row['id'], 'startsAt': row['starts_at'], 'durationMinutes': row['duration_minutes'], 'timeZone': CONSULTATION_TIMEZONE}
@@ -252,6 +338,29 @@ class Handler(BaseHTTPRequestHandler):
         session_hash = self.consultation_session_hash()
         if not session_hash:
             return self.json(401, {'error': 'نشست ارزیابی منقضی شده است؛ ارزیابی را دوباره مرور کن.'})
+        record = self.supabase_assessment()
+        if record:
+            try:
+                ready, lead_id, registered = self.supabase_report_ready(record)
+            except (ValueError, TypeError):
+                ready, lead_id, registered = False, None, False
+            if not ready:
+                return self.json(403, {'error': 'ابتدا ارزیابی را کامل کن تا گزارش آماده شود.'})
+            if write:
+                try:
+                    data = self.request_data(512, brand_analysis.parse_json)
+                    if set(data) != {'phone', 'consent'} or data['consent'] is not True:
+                        raise ValueError()
+                    phone = self.consultation_phone(data['phone'])
+                except (ValueError, TypeError, UnicodeError, RecursionError):
+                    return self.json(422, {'error': 'شماره موبایل را به‌درستی وارد کن.'})
+                try:
+                    lead_id = record['store'].save_lead(record['id'], phone, True, 'assessment-report', None) if not lead_id else record['store'].link_lead(record['id'], lead_id)
+                except supabase_store.SupabaseUnavailable:
+                    logging.getLogger(__name__).warning('database_failure table=leads')
+                    return self.json(503, {'error': 'ثبت لید انجام نشد. لطفاً دوباره تلاش کن.'})
+                return self.json(200, {'registered': True, 'lead_id': lead_id, 'report_unlocked': True})
+            return self.json(200, {'registered': registered})
         try:
             with connect() as db:
                 if not self.consultation_ready(db, session_hash):
@@ -264,9 +373,25 @@ class Handler(BaseHTTPRequestHandler):
                         phone = self.consultation_phone(data['phone'])
                     except (ValueError, TypeError, UnicodeError, RecursionError):
                         return self.json(422, {'error': 'شماره موبایل را به‌درستی وارد کن.'})
-                    db.execute('INSERT INTO assessment_leads(session_hash,phone,consent_version,created_at) VALUES(?,?,?,?) ON CONFLICT(session_hash) DO NOTHING', (session_hash, phone, 'report-access-v1', int(time.time())))
-                    db.commit()
-                registered = db.execute('SELECT 1 FROM assessment_leads WHERE session_hash=?', (session_hash,)).fetchone() is not None
+                    external = self.supabase()
+                    if external:
+                        try:
+                            external.save_lead(external.session_id(self.assessment_session()), phone, True, 'assessment-report', None)
+                        except supabase_store.SupabaseUnavailable:
+                            logging.getLogger(__name__).warning('database_failure table=leads')
+                            return self.json(503, {'error': 'ثبت لید انجام نشد. لطفاً دوباره تلاش کن.'})
+                    else:
+                        db.execute('INSERT INTO assessment_leads(session_hash,phone,consent_version,created_at) VALUES(?,?,?,?) ON CONFLICT(session_hash) DO NOTHING', (session_hash, phone, 'report-access-v1', int(time.time())))
+                        db.commit()
+                external = self.supabase()
+                if external:
+                    try:
+                        registered = external.assessment_has_lead(external.session_id(self.assessment_session()))
+                    except supabase_store.SupabaseUnavailable:
+                        logging.getLogger(__name__).warning('database_failure table=assessments')
+                        return self.json(503, {'error': 'دریافت وضعیت ثبت انجام نشد. لطفاً دوباره تلاش کن.'})
+                else:
+                    registered = db.execute('SELECT 1 FROM assessment_leads WHERE session_hash=?', (session_hash,)).fetchone() is not None
             return self.json(200, {'registered': registered})
         except (sqlite3.Error, OSError):
             return self.json(503, {'error': 'دریافت تأیید ثبت ممکن نشد. لطفاً دوباره تلاش کن.'})
@@ -358,6 +483,33 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(200, {'slots': [dict(row) for row in db.execute('SELECT id,starts_at,duration_minutes,status,capacity FROM consultation_slots ORDER BY starts_at DESC LIMIT 200')], 'timeZone': CONSULTATION_TIMEZONE})
         return self.json(404, {'error': 'Not found'})
 
+    def admin_privacy_allowed(self, staff):
+        if not staff or staff['role'] not in ASSESSMENT_LEAD_ROLES or not self.assessment_https():
+            return False
+        return True
+
+    def admin_assessments(self, staff):
+        store = self.supabase()
+        if not self.admin_privacy_allowed(staff) or not store:
+            return self.json(403, {'error': 'این بخش برای نقش شما مجاز نیست یا اتصال امن برقرار نیست.'})
+        try:
+            rows = store.request('assessments', 'GET', 'select=id,lead_id,current_step,created_at,completed_at&order=created_at.desc&limit=100', prefer='return=minimal')
+            return self.json(200, {'assessments': rows})
+        except supabase_store.SupabaseUnavailable:
+            logging.getLogger(__name__).warning('database_failure table=assessments')
+            return self.json(503, {'error': 'دریافت فهرست ارزیابی‌ها ممکن نشد.'})
+
+    def admin_leads(self, staff):
+        store = self.supabase()
+        if not self.admin_privacy_allowed(staff) or not store:
+            return self.json(403, {'error': 'این بخش برای نقش شما مجاز نیست یا اتصال امن برقرار نیست.'})
+        try:
+            rows = store.request('leads', 'GET', 'select=id,mobile,consent_follow_up,source_page,source_campaign,status,created_at&order=created_at.desc&limit=200', prefer='return=minimal')
+            return self.json(200, {'leads': rows})
+        except supabase_store.SupabaseUnavailable:
+            logging.getLogger(__name__).warning('database_failure table=leads')
+            return self.json(503, {'error': 'دریافت فهرست لیدها ممکن نشد.'})
+
     def audit_consultation(self, db, staff, action, result):
         db.execute('INSERT INTO audit(staff_id,action,result,at) VALUES(?,?,?,?)', (staff['staff_id'], action, result, int(time.time())))
 
@@ -390,6 +542,13 @@ class Handler(BaseHTTPRequestHandler):
         try:
             with connect() as db:
                 report = brand_analysis.analyze(db, session, self.assessment_source(), answers)
+            external = self.supabase()
+            if external:
+                try:
+                    external.save_assessment(session, answers, report)
+                except supabase_store.SupabaseUnavailable:
+                    logging.getLogger(__name__).warning('database_failure table=assessments')
+                    return self.json(503, {'error': 'ذخیرهٔ ارزیابی انجام نشد. لطفاً دوباره تلاش کن.'})
             return self.json(200, {'report': report})
         except brand_analysis.AnalysisError as error:
             return self.json(error.status, {'error': error.message})
@@ -415,6 +574,10 @@ class Handler(BaseHTTPRequestHandler):
                     return self.json(200, {'principal': {'role': staff['role'], 'displayName': staff['name']}, 'csrf': staff['csrf']})
                 if path == '/api/admin/consultations' or path == '/api/admin/consultation-slots':
                     return self.admin_consultation(db, staff)
+                if path == '/api/admin/assessments':
+                    return self.admin_assessments(staff)
+                if path == '/api/admin/leads':
+                    return self.admin_leads(staff)
                 if path == '/api/admin/data':
                     permitted = SECTIONS[staff['role']]
                     data = {key: [] for key in permitted if key != 'summary'}
@@ -444,6 +607,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.assessment_analyze()
         if path == '/api/assessment/lead':
             return self.assessment_lead(write=True)
+        if path == '/api/assessments':
+            return self.assessment_record()
+        if path == '/api/leads':
+            return self.lead_record()
         if path == '/api/assessment/consultation':
             return self.consultation_dispatch(write=True)
         if not self.safe_origin():
@@ -454,6 +621,29 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(422, {'error': 'Invalid input'})
         with connect() as db:
             source = self.client_address[0]
+            if path in ('/api/admin/assessments', '/api/admin/leads'):
+                staff = self.session(db)
+                if not self.admin_privacy_allowed(staff) or not hmac.compare_digest(str(data.get('csrf', '')), staff['csrf']):
+                    return self.json(403, {'error': 'این درخواست مجاز نیست.'})
+                store, target_id = self.supabase(), data.get('id')
+                if not store or not isinstance(target_id, str) or not supabase_store.is_id(target_id):
+                    return self.json(422, {'error': 'شناسهٔ درخواستی معتبر نیست.'})
+                try:
+                    if path == '/api/admin/assessments':
+                        store.request('assessments', 'PATCH', 'lead_id=eq.' + supabase_store.filter_value(target_id), {'lead_id': None}, 'return=minimal')
+                        removed = store.request('assessments', 'DELETE', 'id=eq.' + supabase_store.filter_value(target_id), prefer='return=representation')
+                        action = 'assessment_delete'
+                    else:
+                        store.request('assessments', 'PATCH', 'lead_id=eq.' + supabase_store.filter_value(target_id), {'lead_id': None}, 'return=minimal')
+                        removed = store.request('leads', 'DELETE', 'id=eq.' + supabase_store.filter_value(target_id), prefer='return=representation')
+                        action = 'lead_delete'
+                except supabase_store.SupabaseUnavailable:
+                    logging.getLogger(__name__).warning('database_failure table=%s', 'assessments' if path.endswith('assessments') else 'leads')
+                    return self.json(503, {'error': 'حذف انجام نشد. لطفاً دوباره تلاش کن.'})
+                if not removed:
+                    return self.json(404, {'error': 'رکوردی پیدا نشد.'})
+                self.audit_consultation(db, staff, f'{action}:{target_id}', 'success')
+                return self.json(200, {'status': 'deleted'})
             if path.startswith('/api/admin/consultation'):
                 staff = self.session(db)
                 if not self.assessment_https() or not staff or staff['role'] not in CONSULTATION_ADMIN_ROLES or not hmac.compare_digest(str(data.get('csrf', '')), staff['csrf']):

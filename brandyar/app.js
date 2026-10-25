@@ -217,6 +217,7 @@ let assessmentResult = null;
 let reportLeadStatus = 'unchecked';
 let reportLeadError = '';
 let reportLeadRequest = 0;
+let analysisSucceededAt = 0;
 let assessmentAnswers = {};
 let assessmentStep = 0;
 let assessmentPending = false;
@@ -249,6 +250,7 @@ async function submitBrandAnalysis() {
   assessmentPending = true;
   assessmentError = '';
   assessmentResult = null;
+  analysisSucceededAt = 0;
   reportLeadStatus = 'unchecked';
   reportLeadRequest++;
   reportLeadError = '';
@@ -268,7 +270,9 @@ async function submitBrandAnalysis() {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'تحلیل الان کامل نشد. لطفاً دوباره تلاش کن.');
     if (!validBrandReport(data.report)) throw new Error('گزارش معتبر دریافت نشد. لطفاً دوباره تلاش کن.');
-    if (requestId === assessmentRequestId) assessmentResult = data.report;
+    if (requestId === assessmentRequestId) {assessmentResult = data.report;analysisSucceededAt = Date.now();}
+    // Contract copy: the server stores the answers and short insight; a storage outage must not hide the report.
+    fetch('/api/assessments', {method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:'current',answers:assessmentAnswers,insight:data.report})}).catch(() => {});
   } catch (error) {
     if (requestId === assessmentRequestId) assessmentError = ['SyntaxError','TypeError','AbortError'].includes(error.name) ? 'تحلیل الان کامل نشد. لطفاً دوباره تلاش کن.' : error.message;
   } finally {
@@ -404,7 +408,9 @@ async function requestReportLead(form = null) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
-    const response = await fetch('/api/assessment/lead', {method:form?'POST':'GET',credentials:'same-origin',cache:'no-store',signal:controller.signal,...(form?{headers:{'Content-Type':'application/json'},body:JSON.stringify({phone,consent:true})}:{})});
+    const headers = {'Content-Type':'application/json'};
+    if (Date.now() - analysisSucceededAt < 180000) headers['X-Nesharo-Supabase-Grace'] = String(Math.ceil((Date.now() - analysisSucceededAt) / 1000));
+    const response = await fetch('/api/assessment/lead', {method:form?'POST':'GET',credentials:'same-origin',cache:'no-store',signal:controller.signal,...(form?{headers,body:JSON.stringify({phone,consent:true})}:{headers})});
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'تأیید ثبت دریافت نشد. دوباره تلاش کن.');
     if (typeof data.registered !== 'boolean' || (form && !data.registered)) throw new Error('تأیید ثبت دریافت نشد. دوباره تلاش کن.');

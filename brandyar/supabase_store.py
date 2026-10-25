@@ -1,0 +1,130 @@
+import json
+import os
+import re
+import uuid
+from datetime import datetime, timezone
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote
+from urllib.request import Request, urlopen
+
+
+def filter_value(value):
+    return quote(str(value), safe='')
+
+
+def is_id(value):
+    return isinstance(value, str) and re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', value) is not None
+
+
+class SupabaseUnavailable(Exception):
+    pass
+
+
+class SupabaseStore:
+    def __init__(self):
+        url = os.environ.get('SUPABASE_URL', '').strip().rstrip('/')
+        key = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', '').strip()
+        if not url or not key:
+            self.base = None
+            return
+        if not url.startswith('https://'):
+            raise ValueError('SUPABASE_URL must use HTTPS')
+        self.base = url + '/rest/v1'
+        self.key = key
+
+    @property
+    def enabled(self):
+        return self.base is not None
+
+    @staticmethod
+    def session_id(session):
+        return str(uuid.uuid5(uuid.NAMESPACE_URL, 'nesharo-assessment:' + session))
+
+    def request(self, table, method='GET', query='', body=None, prefer='return=representation'):
+        if not self.enabled:
+            raise SupabaseUnavailable()
+        url = f'{self.base}/{table}' + (f'?{query}' if query else '')
+        headers = {
+            'apikey': self.key,
+            'Authorization': 'Bearer ' + self.key,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Prefer': prefer,
+        }
+        request = Request(url, data=json.dumps(body, ensure_ascii=False).encode() if body is not None else None, headers=headers, method=method)
+        try:
+            with urlopen(request, timeout=10) as response:
+                raw = response.read(262145)
+                if len(raw) > 262144:
+                    raise SupabaseUnavailable()
+                return json.loads(raw) if raw else []
+        except SupabaseUnavailable:
+            raise
+        except (HTTPError, URLError, OSError, ValueError, json.JSONDecodeError) as error:
+            raise SupabaseUnavailable() from error
+
+    def save_assessment(self, session, answers, report):
+        assessment_id = self.session_id(session)
+        insight = {
+            'summary': report['summary'],
+            'positioning': report['positioning'],
+            'content': report['content'],
+            'trust': report['trust'],
+        }
+        # Status only moves forward: a preview can be re-shown without losing an unlocked report.
+        current = self.request('assessments', 'GET', 'session_id=eq.' + filter_value(assessment_id) + '&select=id,current_step', prefer='return=minimal')
+        if current:
+            step = current[0].get('current_step') or 'started'
+            rows = self.request('assessments', 'PATCH', 'id=eq.' + filter_value(assessment_id), {
+                'answers': answers,
+                'insight': insight,
+                'full_report': report,
+                'current_step': 'completed' if step == 'started' else step,
+            })
+            if not rows or rows[0].get('id') != assessment_id:
+                raise SupabaseUnavailable()
+            return assessment_id
+        rows = self.request('assessments', 'POST', body={
+            'id': assessment_id,
+            'session_id': assessment_id,
+            'answers': answers,
+            'insight': insight,
+            'full_report': report,
+            'current_step': 'completed',
+            'completed_at': datetime.now(timezone.utc).isoformat(),
+        })
+        if not rows or not rows[0].get('id'):
+            raise SupabaseUnavailable()
+        return rows[0]['id']
+
+    def save_lead(self, assessment_id, mobile, consent_follow_up, source_page=None, source_campaign=None):
+        existing = self.request('leads', 'GET', 'mobile=eq.' + filter_value(mobile) + '&select=id', prefer='return=minimal')
+        if existing:
+            return self.link_lead(assessment_id, existing[0]['id'])
+        try:
+            rows = self.request('leads', 'POST', body={
+                'mobile': mobile,
+                'consent_follow_up': consent_follow_up,
+                'source_page': source_page,
+                'source_campaign': source_campaign,
+            })
+            lead_id = rows[0]['id']
+        except SupabaseUnavailable:
+            # A concurrent request may have inserted the same number first.
+            existing = self.request('leads', 'GET', 'mobile=eq.' + filter_value(mobile) + '&select=id', prefer='return=minimal')
+            if not existing:
+                raise
+            lead_id = existing[0]['id']
+        if not lead_id:
+            raise SupabaseUnavailable()
+        return self.link_lead(assessment_id, lead_id)
+
+    def link_lead(self, assessment_id, lead_id):
+        rows = self.request('assessments', 'PATCH', 'id=eq.' + filter_value(assessment_id), {'lead_id': lead_id, 'current_step': 'report_unlocked'})
+        if not rows or rows[0].get('lead_id') != lead_id:
+            raise SupabaseUnavailable()
+        return lead_id
+
+    def assessment_has_lead(self, assessment_id):
+        rows = self.request('assessments', 'GET', 'id=eq.' + filter_value(assessment_id) + '&select=lead_id', prefer='return=minimal')
+        return bool(rows and rows[0].get('lead_id'))
