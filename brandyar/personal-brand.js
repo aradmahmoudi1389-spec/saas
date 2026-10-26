@@ -1,0 +1,159 @@
+'use strict';
+(() => {
+  const $ = id => document.getElementById(id);
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const n = value => new Intl.NumberFormat('fa-IR').format(value);
+  const date = value => new Intl.DateTimeFormat('fa-IR',{dateStyle:'medium',timeStyle:'short'}).format(new Date(value*1000));
+  const technical = value => `<details><summary>اطلاعات فنی این نسخه</summary><pre>${esc(JSON.stringify(value,null,2))}</pre></details>`;
+  const admin = location.pathname.startsWith('/admin/');
+  const endpoint = admin ? '/api/admin/personal-brand' : '/api/personal-brand';
+  let bootstrap, current, step = 1, csrf, started = Date.now(), busy = false, skipping = false;
+  let adminQuery = {};
+  const dimensionTitle = key => ({identity:'وضوح هویت حرفه‌ای',position:'جایگاه‌یابی و مخاطب',credibility:'اعتبار تخصصی',message:'پیام و لحن',digital:'اجرای دیجیتال',growth:'رشد و تمایز'})[key] || 'بُعد';
+  let questionTimes = {}, focusedQuestion = null;
+  function finishFocus(){if(focusedQuestion){const {key,time}=focusedQuestion;questionTimes[key]=Math.min((questionTimes[key]||0)+Date.now()-time,86400000);focusedQuestion=null;}}
+  document.addEventListener('focusin',event=>{if(step===3 && event.target.matches('#step-form select')){finishFocus();focusedQuestion={key:event.target.name,time:Date.now()};}});
+  document.addEventListener('focusout',finishFocus);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)finishFocus();});
+  const actions = html => `<div class="actions">${html}</div>`;
+  const button = (action,title,id='') => {
+    if(admin && bootstrap?.permissions && ((!bootstrap.permissions.private && action==='admin_open') || (!bootstrap.permissions.manage && ['template_edit','template_publish','template_inactive','feedback','model_edit','model_publish','archive','regenerate','disconnect_connection'].includes(action)))) return '';
+    return `<button type="button" data-action="${action}" data-id="${esc(id)}">${esc(title)}</button>`;
+  };
+  async function api(query='', body) {
+    const controller = new AbortController(), timer = setTimeout(()=>controller.abort(),95000);
+    try {
+      const response=await fetch(endpoint+query,{credentials:'same-origin',cache:'no-store',signal:controller.signal,...(body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,csrf})}:{})});
+      const result=await response.json();
+      if(!response.ok) throw new Error(result.error || 'عملیات انجام نشد؛ دوباره تلاش کنید.');
+      return result.data;
+    } catch(error) {
+      if(['AbortError','SyntaxError','TypeError'].includes(error.name)) throw new Error('ارتباط با سرور کامل نشد؛ بازخوانی اطلاعات را بزنید.');
+      throw error;
+    } finally {clearTimeout(timer);}
+  }
+  function confirmAction(text) {
+    $('confirm-text').textContent=text;$('confirm-check').checked=false;$('confirm-yes').disabled=true;$('confirm').returnValue='cancel';$('confirm').showModal();
+    return new Promise(resolve=>$('confirm').addEventListener('close',()=>resolve($('confirm').returnValue==='yes' && $('confirm-check').checked),{once:true}));
+  }
+  $('confirm-check').addEventListener('change',()=>{$('confirm-yes').disabled=!$('confirm-check').checked;});
+  function field(key,title,value='',required=false) {return `<label>${esc(title)}${required?' *':''}<textarea name="${esc(key)}" maxlength="1200" ${required?'required':''}>${esc(value)}</textarea><small data-count="${esc(key)}">${n(String(value).length)} از ۱۲۰۰ نویسه</small></label>`;}
+  async function load() {
+    $('feedback').textContent='در حال دریافت اطلاعات…';
+    bootstrap=await api(admin?'':'?action=bootstrap');csrf=bootstrap.csrf;
+    if(admin){paintAdmin();}else{home();}
+    $('feedback').textContent='';
+  }
+  function home() {
+    current=null;
+    const rows=bootstrap.assessments;
+    const outcome=new URLSearchParams(location.search).get('instagram');
+    const messages={connected:'اتصال برقرار شد؛ برای تحلیل، همگام‌سازی را انجام دهید.',failed:'اتصال اینستاگرام موفق نبود؛ می‌توانید دوباره تلاش کنید یا بدون اتصال ادامه دهید.',cancelled:'اتصال به انتخاب شما لغو شد.'};
+    $('app').innerHTML=`${outcome?`<p class="notice">${esc(messages[outcome]||'وضعیت اتصال را بررسی کنید.')}</p>`:''}<section><h2>از شناخت خود تا برنامهٔ اقدام</h2><p>پنج مرحله شامل هدف حرفه‌ای، هویت، رفتارها، شواهد و اتصال اختیاری. پاسخ‌ها و گزارش روی سرور ذخیره می‌شوند.</p><p class="notice">دسترسی فعلاً به همین مرورگر و نشست امن آن وابسته است؛ حساب عمومی دائمی و بازیابی بین دستگاه‌ها در این نسخه وجود ندارد. با حذف cookie ممکن است دسترسی از بین برود.</p>${button('start','شروع ارزیابی جدید')}<h3>ارزیابی‌های این مرورگر</h3>${rows.length?rows.map((r,i)=>`<p>${n(i+1)}. ${date(r.created_at)} · ${r.state==='completed'?'تکمیل‌شده':'در حال تکمیل'} ${button('open',r.state==='completed'?'مشاهدهٔ گزارش':'ادامه',r.id)}</p>`).join(''):'<p>هنوز ارزیابی ثبت نکرده‌اید.</p>'}</section>${connectionPanel()}`;
+  }
+  function connectionPanel() {
+    const c=bootstrap.connection;
+    return `<section><h2>اتصال و حریم خصوصی اینستاگرام</h2>${c?`<p>حساب ${esc(c.username)} · پایان مجوز ${date(c.expires_at)}</p><p>آخرین همگام‌سازی: ${c.synced_at?date(c.synced_at):'هنوز انجام نشده'}</p>${c.error_code?'<p class="notice">آخرین همگام‌سازی موفق نبود؛ دادهٔ آخرین اجرای موفق حفظ شده است.</p>':''}${c.status==='connected'?actions(button('sync','همگام‌سازی')+button('disconnect','قطع اتصال')):`<p class="notice">${c.status==='expired'?'مجوز پایان یافته است.':'اتصال قطع شده است.'} برای دریافت دادهٔ تازه، از مرحلهٔ پنجم دوباره متصل شوید.</p>`}`:'<p>حسابی متصل نیست. اتصال در مرحلهٔ پنجم کاملاً اختیاری است.</p>'}<p>قطع اتصال، استفادهٔ بعدی از مجوز را متوقف می‌کند. حذف داده، snapshotها و گزارش‌های مشتق‌شدهٔ این مرورگر را هم حذف می‌کند؛ پاسخ‌های پرسش‌نامه باقی می‌مانند.</p>${button('delete_instagram','درخواست حذف داده‌های اینستاگرام و گزارش‌های مشتق‌شده')}</section>`;
+  }
+  function paintStep() {
+    const t=current.template, id=current.assessment.id;
+    let saved=current.answers[String(step)]||{};
+    try {saved={...saved,...JSON.parse(sessionStorage.getItem('pb-draft-'+id+'-'+step)||'{}')};}catch{}
+    const names=['وضعیت حرفه‌ای و هدف','هویت و جایگاه','رفتارهای برندسازی','شواهد اختیاری','اتصال اختیاری اینستاگرام'];
+    let form='';
+    if(step===1 || step===2 || step===4){
+      const fields=step===1?t.base:step===2?t.identity:t.evidence.map(v=>[...v,false]);
+      form=fields.map(([key,title,required])=>field(key,title,saved[key],required)).join('');
+      if(step===1)form+=`<label>هدف اصلی برند *<select name="goal" required><option value="">انتخاب کنید</option>${t.goals.map(v=>`<option ${saved.goal===v?'selected':''}>${esc(v)}</option>`).join('')}</select></label>`;
+    }else if(step===3){
+      form=current.order.map(id=>t.items.find(q=>q.id===id)).map(q=>`<label>${esc(q.title)}<select name="${esc(q.id)}" required><option value="">انتخاب کنید</option>${t.likert.map((label,i)=>`<option value="${i+1}" ${Number(saved[q.id])===i+1?'selected':''}>${esc(label)}</option>`).join('')}</select></label>`).join('');
+    }else{
+      const connected=Boolean(bootstrap.connection?.status==='connected' && bootstrap.connection.synced_at && bootstrap.connection.expires_at>Date.now()/1000);
+      form=`<h3>تحلیل دقیق‌تر با اتصال اختیاری اینستاگرام</h3><p>اگر حساب حرفه‌ای خود را متصل کنید، اطلاعات مجاز پروفایل، کپشن‌ها، هشتگ‌های تکرارشونده و نسبت قالب‌ها در گزارش لحاظ می‌شود. تحلیل معنایی لحن، تصویر و ویدیو در این نسخه فعال نیست.</p><ul><li>اتصال کاملاً اختیاری است و رمز اینستاگرام دریافت نمی‌شود.</li><li>مجوز فقط در صفحهٔ رسمی Meta داده می‌شود.</li><li>حساب شخصی قابل اتصال نیست؛ Business یا Creator لازم است.</li><li>فقط اطلاعات پایه و حداکثر ۲۵ محتوای اخیر دریافت می‌شود.</li><li>مجوز insights و کامنت درخواست نمی‌شود.</li></ul><label><input type="checkbox" id="consent">با دریافت و تحلیل متن حساب حرفه‌ای خود برای این ارزیابی مطابق سیاست نسخهٔ ۱ و نگهداری قابل‌تنظیم (پیش‌فرض ۳۰ روز) موافقم.</label><div class="actions"><button type="button" data-action="oauth" ${bootstrap.instagram_available?'':'disabled'}>اتصال اینستاگرام و افزودن شواهد رسمی</button><button type="button" data-action="skip">ادامه بدون اتصال</button></div>${!bootstrap.instagram_available?'<p class="notice">تنظیمات واقعی اپ Meta هنوز تکمیل نشده است؛ اتصال فعال نیست و می‌توانید ارزیابی را بدون آن کامل کنید.</p>':''}${connected?'<button type="submit" name="connected">ادامه با شواهد همگام‌شده</button>':''}${bootstrap.connection?.status==='connected'?button('sync','همگام‌سازی دادهٔ پیج'):''}${skipping?field('introduction','اگر مایلید، متن فعلی معرفی خود در شبکه‌های اجتماعی یا وب‌سایتتان را وارد کنید.',saved.introduction)+'<button type="submit" name="skip">تولید گزارش بدون اتصال</button>':''}<small>متن معرفی فقط در صورت ادامه بدون اتصال استفاده می‌شود. اتصال تنها به معنای تحلیل کامل یا اطمینان بالا نیست.</small>`;
+    }
+    $('app').innerHTML=`<nav>${names.map((name,i)=>`<span ${i+1===step?'aria-current="step"':''}>${n(i+1)}. ${name}</span>`).join(' · ')}</nav><section><h2>مرحلهٔ ${n(step)}: ${names[step-1]}</h2><form id="step-form">${form}${step<5?'<button type="submit">ذخیره و مرحلهٔ بعد</button>':''}</form>${actions((step>1?button('previous','مرحلهٔ قبل'):'')+button('home','بازگشت به ارزیابی‌ها'))}<small>پیش‌نویس هنگام تایپ در همین تب ذخیره می‌شود؛ ثبت قطعی روی سرور پس از ذخیرهٔ مرحله است.</small></section>`;started=Date.now();
+    if(step===5)api('',{action:'offer_view',id}).catch(()=>{});
+  }
+  function reportView(report) {
+    const list=values=>`<ol>${values.map(v=>`<li>${esc(v.title)}<small>مبنای توصیه: پاسخ‌های بُعد ${esc(report.dimensions.find(d=>d.key===v.dimension)?.title||'')}.</small></li>`).join('')}</ol>`;
+    const ig=report.instagram;
+    return `<section><h2>جمع‌بندی ارزیابی</h2><p class="metric">مرحلهٔ احتمالی: ${esc(report.stage)}</p><p>سطح اطمینان: ${esc(report.confidence)}</p><p>قوت: ${esc(report.strength)} · گلوگاه: ${esc(report.bottleneck)}</p><p>${esc(report.pattern)}</p><p>زمان تحلیل: ${date(report.created_at)} · نسخهٔ نتیجه: ${n(report.version)}</p></section><div class="grid">${report.dimensions.map(d=>`<article class="card"><h3>${esc(d.title)}</h3><p>${esc(d.description)}</p><progress max="100" value="${d.score}" aria-label="${esc(d.title)}"></progress><p>${n(d.score)} از ۱۰۰ · ${esc(d.interpretation)}</p><small>منبع امتیاز: پاسخ‌های خوداظهاری؛ ${n(d.evidence.length)} گویه.</small></article>`).join('')}</div><section><h2>هویت و جایگاه</h2><h3>پیشنهاد اولیهٔ پیام مرکزی</h3><p>${esc(report.central_message)}</p><p>مخاطب: ${esc(report.professional.audience)}</p><p>مسئله: ${esc(report.professional.problem)}</p><p>فرصت تمایز خوداظهارشده: ${esc(report.identity.difference)}</p></section>${ig?`<section><h2>شواهد رسمی پیج</h2><p>آخرین همگام‌سازی: ${date(ig.synced_at)}</p><h3>متن معرفی دریافت‌شده</h3><p>${esc(ig.profile.biography||'این فیلد توسط API در دسترس نبود؛ جعل نشده است.')}</p><p>${n(ig.observations.sample_size)} محتوا و ${n(ig.observations.caption_count)} کپشن بررسی شد.</p><p>در ${n(ig.observations.possible_cta_count)} کپشن، واژه‌های احتمالی دعوت به اقدام دیده شد؛ این شمارش نشانهٔ کیفیت یا اثربخشی قطعی نیست.</p><p>قالب‌ها: ${Object.entries(ig.observations.formats).map(([k,v])=>`${esc(({IMAGE:'تصویر',VIDEO:'ویدیو',CAROUSEL_ALBUM:'آلبوم'})[k]||'سایر')} ${n(v)}`).join('، ')}</p><p>هشتگ‌های تکرارشونده: ${ig.observations.hashtags.map(v=>esc(v[0])).join('، ')||'نمونه‌ای ثبت نشده'}</p><p>این موضوع‌ها را با مخاطب و مسئلهٔ ادعاشدهٔ بالا مقایسه کنید؛ تطابق معنایی خودکار یا قضاوت شخصیت انجام نشده است.</p></section>`:''}<section><h2>سه اقدام فوری</h2>${list(report.immediate)}<h2>برنامهٔ سی روز آینده</h2>${list(report.thirty_days)}<p>شاخص‌های پیگیری: تعداد نمونه‌کار مستند، استمرار انتشار و اقدام مرتبط مخاطبان.</p></section><section><h2>محدودیت تحلیل</h2><ul>${report.limitations.map(v=>`<li>${esc(v)}</li>`).join('')}</ul><p>لینک عمومی ساخته نمی‌شود؛ در صورت دریافت فایل گزارش، فقط آن را با افراد مورداعتماد به اشتراک بگذارید.</p></section>`;
+  }
+  function comparison(first,second){return `<section><h2>مقایسهٔ دو نتیجه</h2><p>${first.template_version===second.template_version?'نسخهٔ تست یکسان است؛ تغییر نمره به‌تنهایی نشان‌دهندهٔ تغییر واقعی یا معناداری آماری نیست.':'نسخه‌های تست متفاوت‌اند؛ نمره‌ها ممکن است مستقیماً قابل مقایسه نباشند.'}</p>${first.dimensions.map(d=>`<p>${esc(d.title)}: ${n(d.score)} ← ${n(second.dimensions.find(v=>v.key===d.key)?.score)}</p>`).join('')}</section>`;}
+  function paintReports(){
+    const reports=current.reports;
+    $('app').innerHTML=reports.length?reportView(reports[0].body):'<section><h2>گزارشی موجود نیست</h2><p>دادهٔ اینستاگرام یا گزارش قبلاً حذف شده است؛ برای تولید مجدد، ارزیابی تازه بسازید.</p></section>';
+    if(reports.length>1)$('app').insertAdjacentHTML('beforeend',`<section><h2>مقایسهٔ آخرین دو نسخه</h2>${reports[0].body.dimensions.map((d,i)=>`<p>${esc(d.title)}: ${n(reports[1].body.dimensions[i].score)} ← ${n(d.score)}</p>`).join('')}</section>`);
+    $('app').insertAdjacentHTML('beforeend',actions(button('home','ارزیابی‌های من')+(reports.length?button('export_report','دریافت گزارش برای اشتراک‌گذاری'):'')+button('delete_assessment','حذف این ارزیابی')));
+  }
+  function paintAdmin(){
+    const data=bootstrap;
+    $('app').innerHTML=`<section id="assessments"><h2>مدیریت ارزیابی پرسونال برند</h2><nav aria-label="بخش‌های مدیریت ارزیابی">${[['assessments','ارزیابی‌ها'],['test-versions','نسخه‌های تست و سؤال‌ها'],['scoring-models','مدل نمره‌دهی'],['instagram-connections','اتصال‌های اینستاگرام'],['sync-status','همگام‌سازی و خطاها'],['privacy-settings','حریم خصوصی'],['validation','اعتبارسنجی']].map(([id,label])=>`<a href="#${id}">${label}</a>`).join('')}</nav><p>این ماژول مستقل از ارزیابی قدیمی است. همهٔ فهرست‌ها از دادهٔ ثبت‌شده خوانده می‌شوند.</p><h3>ارزیابی‌ها</h3><form id="admin-filter"><div class="grid"><label>شناسهٔ ارزیابی<input name="search" type="search"></label><label>وضعیت<select name="state"><option value="">همه</option><option value="draft">پیش‌نویس</option><option value="completed">تکمیل‌شده</option></select></label><label>مرحلهٔ بلوغ<select name="maturity"><option value="">همه</option>${['کشف','تعریف','تثبیت','تمایز','مرجعیت'].map(v=>`<option>${v}</option>`).join('')}</select></label><label>اطمینان<select name="confidence"><option value="">همه</option><option>خوداظهاری</option><option>خوداظهاری به‌همراه شواهد</option></select></label><label>شواهد اینستاگرام در گزارش<select name="connected"><option value="">همه</option><option value="yes">دارد</option><option value="no">ندارد</option></select></label></div><button>اعمال فیلتر</button></form><p>تعداد کل در این فیلتر: ${n(data.total)} · صفحهٔ ${n(data.offset/100+1)}</p>${actions((data.offset>0?button('page_previous','صفحهٔ قبل'):'')+(data.offset+100<data.total?button('page_next','صفحهٔ بعد'):''))}<label>جست‌وجو در صفحهٔ دریافت‌شده<input id="filter" type="search"></label><div id="assessment-list">${data.assessments.length?data.assessments.map((r,i)=>`<p data-row>${n(i+1)} · ${date(r.created_at)} · ${r.state==='completed'?'تکمیل‌شده':'پیش‌نویس'} ${r.archived_at?'· آرشیو':''}<small>بلوغ: ${esc(r.maturity||'هنوز محاسبه نشده')} · اطمینان: ${esc(r.confidence||'هنوز محاسبه نشده')}</small><small>شناسه: <bdi>${esc(r.id)}</bdi></small> ${button('admin_open','مشاهدهٔ پاسخ و نتیجه',r.id)}</p>`).join(''):'<p>هنوز ارزیابی واقعی در این ماژول ثبت نشده است.</p>'}</div></section><section id="test-versions"><h2>نسخه‌های تست و سؤال‌ها</h2>${data.templates.map(t=>`<details><summary>نسخهٔ ${n(t.version)} · ${esc(t.status==='published'?'منتشرشده':t.status==='draft'?'پیش‌نویس':'غیرفعال')}</summary>${t.body.items.map(q=>`<p>${esc(q.title)}</p>`).join('')}${actions(button('template_edit','ساخت نسخهٔ اصلاحی',t.id)+button('template_publish','انتشار یا بازگردانی به این نسخه',t.id)+button('template_inactive','غیرفعال‌سازی',t.id)+button('feedback','ثبت بازخورد خبره',t.id))}</details>`).join('')}</section><section id="scoring-models"><h2>مدل نمره‌دهی</h2>${data.models.map(m=>`<p>نسخهٔ ${n(m.version)} · ${esc(m.status==='published'?'منتشرشده':m.status==='draft'?'پیش‌نویس':'غیرفعال')}</p>${actions(button('model_edit','نسخهٔ جدید وزن‌ها',m.id)+button('model_publish','انتشار یا بازگردانی',m.id))}`).join('')}</section><section id="instagram-connections"><h2>اتصال‌های اینستاگرام و همگام‌سازی</h2>${data.connections.length?data.connections.map(c=>`<p>${esc(c.username)} · ${esc(c.status==='connected'?'متصل':c.status==='expired'?'منقضی':'قطع‌شده')} · آخرین همگام‌سازی ${c.synced_at?date(c.synced_at):'ندارد'}${button('disconnect_connection','قطع اتصال با ثبت دلیل',c.id)}</p>`).join(''):'<p>هیچ اتصال ثبت‌شده‌ای نیست.</p>'}<p>تعداد خطاهای همگام‌سازی در ۱۰۰ اجرای اخیر: ${n(data.sync_jobs.filter(j=>j.status==='failed').length)}</p></section><section id="sync-status"><h2>وضعیت همگام‌سازی و خطاهای پردازش</h2>${data.sync_jobs.length?`<div class="scroll"><table><thead><tr><th>زمان</th><th>وضعیت</th><th>خطا</th></tr></thead><tbody>${data.sync_jobs.map(j=>`<tr><td>${date(j.created_at)}</td><td>${esc(({running:'در حال اجرا',success:'موفق',failed:'ناموفق'})[j.status]||'ثبت‌شده')}</td><td>${j.error_code?'سرویس موقتاً در دسترس نبود؛ دوباره تلاش کنید.':'ندارد'}</td></tr>`).join('')}</tbody></table></div>`:'<p>همگام‌سازی ثبت نشده است.</p>'}</section><section id="privacy-settings"><h2>حریم خصوصی و نگهداری داده</h2><form id="privacy-form"><label>روز نگهداری snapshot اینستاگرام<input name="days" type="number" min="1" max="365" value="${data.retention_days}" required></label><label>دلیل تغییر<textarea name="reason" required maxlength="500"></textarea></label><button>ثبت سیاست</button></form></section><section><h2>اعتبارسنجی تدریجی</h2><p>ابزار هنوز از نظر آماری تأیید نشده است. زمان کل مرحله و زمان تمرکز روی گویه‌ها از مرورگر دریافت می‌شود؛ این زمان‌ها زمان دقیق تفکر نیستند.</p>${data.metrics.map(m=>`<p>مرحلهٔ ${n(m.step)}: ${n(m.completed)} ثبت، میانگین زمان ${n(Math.round(m.elapsed_ms/1000))} ثانیه</p>`).join('')||'<p>پاسخ واقعی برای محاسبه وجود ندارد.</p>'}</section>`;
+    $('app').insertAdjacentHTML('beforeend',`<section id="validation"><h2>داده‌های مقدماتی اعتبارسنجی</h2>${data.validation.map(v=>`<details><summary>نسخهٔ ${n(data.templates.find(t=>t.id===v.template_version)?.version)} · ${n(v.sample_size)} پاسخ</summary><p>${esc(v.warning)}</p><p>پاسخ‌های یکنواخت: ${n(v.straight_line_count)}</p>${v.internal_consistency.map(d=>`<p>ثبات درونی ${esc(dimensionTitle(d.dimension))}: ${d.alpha===null?'قابل محاسبه نیست':n(d.alpha)}</p>`).join('')}${technical(v.correlations)}${data.permissions.export?button('validation_export','دریافت پاسخ‌های عددی ناشناس',v.template_version):''}</details>`).join('')}<h3>زمان تمرکز ثبت‌شدهٔ گویه‌ها</h3>${data.question_metrics.map(m=>`<p>${esc(data.templates[0].body.items.find(q=>q.id===m.question_id)?.title||'گویه')}: ${n(Math.round(m.elapsed_ms/1000))} ثانیه، ${n(m.measured)} اندازه‌گیری</p>`).join('')||'<p>هنوز اندازه‌گیری ثبت نشده است.</p>'}</section>`);
+    if(data.permissions.private)$('app').insertAdjacentHTML('beforeend',`<section><h2>مقایسهٔ دو ارزیابی</h2><form id="compare-assessments"><label>شناسهٔ ارزیابی اول<input name="first" maxlength="36" required></label><label>شناسهٔ ارزیابی دوم<input name="second" maxlength="36" required></label><button>مقایسهٔ آخرین گزارش‌ها</button></form><div id="comparison"></div></section>`);
+    if(!data.permissions.manage)$('privacy-form').replaceWith(Object.assign(document.createElement('p'),{textContent:'تغییر سیاست نگهداری فقط برای مدیر مجاز است.'}));
+  }
+  async function open(id){skipping=false;questionTimes={};focusedQuestion=null;current=await api('?id='+encodeURIComponent(id));step=Math.min(current.assessment.stage+1,5);if(current.assessment.state==='completed'){paintReports();await api('',{action:'view_report',id});}else paintStep();}
+  document.addEventListener('input',event=>{
+    if(event.target.id==='filter'){for(const row of document.querySelectorAll('[data-row]'))row.hidden=!row.textContent.includes(event.target.value);return;}
+    const form=event.target.closest('#step-form');if(!form||!current)return;
+    const values=Object.fromEntries(new FormData(form));try{sessionStorage.setItem('pb-draft-'+current.assessment.id+'-'+step,JSON.stringify(values));}catch{$('feedback').textContent='ذخیرهٔ موقت مرورگر ممکن نیست؛ برای ثبت، ذخیرهٔ مرحله را بزنید.';}
+    const count=form.querySelector(`[data-count="${event.target.name}"]`);if(count)count.textContent=n(event.target.value.length)+' از ۱۲۰۰ نویسه';
+  });
+  document.addEventListener('submit',async event=>{
+    if(event.target.closest('#confirm'))return;event.preventDefault();if(busy)return;busy=true;
+    const form=event.target,submitter=event.submitter,buttons=[...form.querySelectorAll('button')].map(button=>[button,button.disabled]);for(const [button] of buttons)button.disabled=true;
+    try{
+      const values=Object.fromEntries(new FormData(form));
+      if(form.id==='step-form'){
+        finishFocus();
+        if(step===3)for(const key in values)values[key]=Number(values[key]);
+        let answers=values;
+        if(step===5)answers={choice:submitter?.name==='connected'?'connected':'skip',introduction:values.introduction||''};
+        const id=current.assessment.id;
+        const saved=await api('',{action:'save',id,revision:current.assessment.revision,step,answers,question_times:step===3?questionTimes:{},elapsed_ms:Math.min(Date.now()-started,86400000)});
+        current.assessment.revision=saved.revision;current.answers[String(step)]=answers;try{sessionStorage.removeItem('pb-draft-'+id+'-'+step);}catch{}
+        if(step===5){await api('',{action:'report',id});await open(id);}else{step++;paintStep();}
+      }else if(form.id==='compare-assessments'){
+        const [first,second]=await Promise.all([api('?id='+encodeURIComponent(values.first)),api('?id='+encodeURIComponent(values.second))]);
+        if(!first.reports.length||!second.reports.length)throw new Error('هر دو ارزیابی باید گزارش موجود داشته باشند.');
+        $('comparison').innerHTML=comparison(first.reports[0].body,second.reports[0].body);
+      }else if(form.id==='compare-versions'){
+        const first=current.reports.find(r=>r.id===values.first),second=current.reports.find(r=>r.id===values.second);
+        if(!first||!second)throw new Error('نسخه‌های نتیجه را انتخاب کنید.');
+        $('comparison').innerHTML=comparison(first.body,second.body);
+      }else if(form.id==='admin-filter'){
+        adminQuery=values;bootstrap=await api('?'+new URLSearchParams(values));paintAdmin();
+      }else if(form.id==='template-form'||form.id==='model-form'){
+        const kind=form.id==='template-form'?'template':'model',version=bootstrap[kind==='template'?'templates':'models'].find(v=>v.id===form.dataset.id),body=JSON.parse(JSON.stringify(version.body));
+        if(kind==='template')for(const q of body.items)q.title=values[q.id];else for(const k of Object.keys(body.dimensions))body.dimensions[k]=Number(values[k]);
+        if(await confirmAction('نسخهٔ پیش‌نویس مستقل ساخته می‌شود؛ نسخه‌های قبلی تغییر نمی‌کنند.')){await api('',{action:kind+'_draft',body,reason:values.reason,confirmed:true});await load();}else throw new Error('عملیات به انتخاب شما لغو شد.');
+      }else if(form.id==='privacy-form'){if(!await confirmAction('سیاست نگهداری برای پاک‌سازی‌های بعدی اعمال می‌شود.'))throw new Error('عملیات به انتخاب شما لغو شد.');await api('',{action:'privacy',retention_days:Number(values.days),reason:values.reason,confirmed:true});await load();}
+      $('feedback').textContent='اطلاعات با موفقیت روی سرور ثبت شد.';
+    }catch(error){$('feedback').textContent=error.message;}finally{busy=false;for(const [button,disabled] of buttons)button.disabled=disabled;}
+  });
+  document.addEventListener('click',async event=>{
+    const target=event.target.closest('[data-action]');if(!target||busy)return;busy=true;target.disabled=true;
+    const action=target.dataset.action,id=target.dataset.id;
+    try{
+      if(action==='start'){const row=await api('',{action});await open(row.id);}
+      else if(action==='open')await open(id);
+      else if(action==='page_next'||action==='page_previous'){adminQuery.offset=Math.max(0,bootstrap.offset+(action==='page_next'?100:-100));bootstrap=await api('?'+new URLSearchParams(adminQuery));paintAdmin();}
+      else if(action==='export_report'){const result=await api('',{action,id:current.assessment.id});const content='<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'"><title>گزارش ارزیابی پرسونال برند</title><style>body{font:16px/2 Tahoma,sans-serif;max-width:900px;margin:auto;padding:24px;color:#203d30}section,article{border:1px solid #ccd8cc;border-radius:12px;padding:20px;margin:16px 0}progress{width:100%}p,li{white-space:pre-wrap;overflow-wrap:anywhere}small{display:block}</style>'+reportView(result.report)+'</html>';const url=URL.createObjectURL(new Blob([content],{type:'text/html;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download='personal-brand-report.html';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+      else if(action==='validation_export'){const result=await api('?action=validation_export&template_version='+encodeURIComponent(id));const url=URL.createObjectURL(new Blob([JSON.stringify(result,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='anonymous-assessment-responses.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+      else if(action==='skip'){skipping=true;paintStep();}
+      else if(action==='previous'){step--;paintStep();}
+      else if(action==='home'){if(!admin && current?.assessment.state==='draft')await api('',{action:'abandon',id:current.assessment.id});await load();}
+      else if(action==='oauth'){if(!$('consent').checked)throw new Error('برای اتصال، رضایت آگاهانه را انتخاب کنید.');const r=await api('',{action,consent:true});location.assign(r.authorization_url);}
+      else if(action==='sync'){await api('',{action});bootstrap=await api('?action=bootstrap');if(current)paintStep();else home();}
+      else if(['disconnect','delete_instagram','delete_assessment'].includes(action)){if(await confirmAction(action==='disconnect'?'استفادهٔ آینده از مجوز متوقف می‌شود.':'داده و گزارش‌های مربوط حذف می‌شوند؛ این عملیات برگشت‌پذیر نیست.')){await api('',{action,id:current?.assessment.id});if(action==='delete_assessment'){for(let s=1;s<=5;s++){try{sessionStorage.removeItem('pb-draft-'+current.assessment.id+'-'+s);}catch{}}}await load();}}
+      else if(action==='admin_open'){current=await api('?id='+encodeURIComponent(id));$('app').innerHTML=`${button('home','بازگشت')}<section><h2>پاسخ‌های ارزیابی</h2>${Object.entries(current.answers).map(([s,values])=>`<h3>مرحلهٔ ${n(s)}</h3><dl>${Object.entries(values).map(([key,value])=>`<dt>${esc(current.template.items.find(q=>q.id===key)?.title||[...current.template.base,...current.template.identity,...current.template.evidence].find(f=>f[0]===key)?.[1]||({goal:'هدف برند',choice:'روش اتصال',introduction:'معرفی اختیاری'})[key]||'پاسخ')}</dt><dd>${esc(s==='3'?current.template.likert[Number(value)-1]:value==='skip'?'بدون اتصال':value==='connected'?'همراه اتصال':value)}</dd>`).join('')}</dl>`).join('')}</section>${current.reports.map(r=>reportView(r.body)).join('')||'<p>نتیجه هنوز تولید نشده است.</p>'}${bootstrap.permissions.private?technical(current):''}${actions(button('regenerate','تولید نسخهٔ جدید نتیجه',id)+button('archive','آرشیو نرم',id))}`;if(current.reports.length>1)$('app').insertAdjacentHTML('beforeend',`<section><h2>مقایسهٔ نسخه‌های نتیجه</h2><form id="compare-versions">${['first','second'].map((key,index)=>`<label>نتیجهٔ ${n(index+1)}<select name="${key}">${current.reports.map((r,i)=>`<option value="${esc(r.id)}" ${i===index?'selected':''}>نسخهٔ ${n(r.version)}</option>`).join('')}</select></label>`).join('')}<button>مقایسه</button></form><div id="comparison"></div></section>`);}
+      else if(action==='template_edit'||action==='model_edit'){
+        const kind=action==='template_edit'?'template':'model',v=bootstrap[kind==='template'?'templates':'models'].find(v=>v.id===id);
+        $('app').innerHTML=`<section><h2>نسخهٔ جدید؛ بدون تغییر نسخهٔ قبلی</h2><form id="${kind}-form" data-id="${id}">${kind==='template'?v.body.items.map(q=>field(q.id,q.title,q.title,true)).join(''):Object.entries(v.body.dimensions).map(([key,value])=>`<label>وزن ${esc(dimensionTitle(key))}<input type="number" name="${key}" value="${value}" min="0.001" max="1" step="any" required></label>`).join('')}<label>دلیل تغییر<textarea name="reason" maxlength="500" required></textarea></label><button>ثبت پیش‌نویس</button></form></section>`;
+      }else if(admin){const reason=prompt('دلیل این عملیات را بنویسید:');if(reason&&await confirmAction('عملیات ثبت و حسابرسی می‌شود؛ تاریخچهٔ قبلی حفظ خواهد شد.')){await api('',{action,id,reason,confirmed:true,...(action==='regenerate'?{scoring_version:bootstrap.models.find(m=>m.status==='published')?.id}:{})});await load();}}
+    }catch(error){$('feedback').textContent=error.message;}finally{busy=false;target.disabled=false;}
+  });
+  $('retry').addEventListener('click',()=>load().catch(error=>$('feedback').textContent=error.message));
+  load().catch(error=>{$('feedback').textContent=error.message;$('app').textContent='دریافت اطلاعات انجام نشد؛ بازخوانی اطلاعات را انتخاب کنید.';});
+})();

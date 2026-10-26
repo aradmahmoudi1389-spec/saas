@@ -200,7 +200,7 @@
       bootstrap=await api('/api/admin/workspace?section=bootstrap');
       const modules=Object.entries(bootstrap.modules);
       $('principal').textContent=bootstrap.principal.name+' · '+(roleNames[bootstrap.principal.role]||bootstrap.principal.role);
-      $('navigation').innerHTML=modules.map(([key,title],index)=>`<a href="/admin/${key}" data-section="${key}"><span class="nav-icon" aria-hidden="true">${icons[index%icons.length]}</span>${esc(title)}</a>`).join('')+(bootstrap.principal.role==='owner'?'<a href="/admin/consultations"><span class="nav-icon" aria-hidden="true">◴</span>مدیریت مشاوره‌ها</a>':'');
+      $('navigation').innerHTML=modules.map(([key,title],index)=>`<a href="/admin/${key}" data-section="${key}"><span class="nav-icon" aria-hidden="true">${icons[index%icons.length]}</span>${esc(title)}</a>`).join('')+(can('assessments')?'<a href="/admin/personal-brand">ارزیابی ساختاریافتهٔ پرسونال برند</a>':'')+(bootstrap.principal.role==='owner'?'<a href="/admin/consultations"><span class="nav-icon" aria-hidden="true">◴</span>مدیریت مشاوره‌ها</a>':'');
       if(!bootstrap.modules[section])section=modules[0]?.[0];
       if(!section){$('content').innerHTML=empty('دسترسی پنل جدید برای این نقش فعال نیست','مالک می‌تواند نقش مناسب پنل جدید را برای شما تعیین کند.');return;}
       selectSection(section);

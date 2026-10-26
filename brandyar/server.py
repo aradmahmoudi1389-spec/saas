@@ -22,6 +22,7 @@ from zoneinfo import ZoneInfo
 import brand_analysis
 import supabase_store
 import admin_workspace
+import personal_brand
 
 ASSESSMENT_COOKIE_KEY = secrets.token_bytes(32)
 ASSESSMENT_LEAD_ROLES = {'owner', 'support'}
@@ -80,6 +81,7 @@ def connect():
                 db.execute("CREATE UNIQUE INDEX consultation_active_slot ON consultation_requests(slot_id) WHERE status IN ('pending','confirmed')")
                 db.execute('CREATE INDEX consultation_requests_lookup ON consultation_requests(status,created_at)')
     admin_workspace.initialize(db)
+    personal_brand.initialize(db)
     return db
 
 
@@ -625,6 +627,22 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlsplit(self.path).path
+        if path == '/api/personal-brand/instagram/callback':
+            import personal_brand_instagram
+            return personal_brand_instagram.callback(self, connect)
+        if path in {'/api/personal-brand', '/api/admin/personal-brand'}:
+            return personal_brand.dispatch(self, connect, admin=path.startswith('/api/admin/'))
+        if path in {'/personal-brand', '/personal-brand.js', '/personal-brand.css', '/admin/personal-brand'}:
+            if path == '/admin/personal-brand':
+                with connect() as db:
+                    staff = self.session(db)
+                    if not staff:
+                        return self.respond(303, content_type='text/html; charset=utf-8', headers={'Location': '/admin/login'})
+                    if not admin_workspace.allowed(staff['role'], 'assessments'):
+                        return self.json(403, {'error': 'به این بخش دسترسی ندارید.'})
+            name = 'personal-brand.html' if path in {'/personal-brand', '/admin/personal-brand'} else path[1:]
+            file = ROOT / name
+            return self.respond(200, file.read_bytes(), {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8'}[file.suffix])
         if path == '/api/assessment/status':
             return self.assessment_status()
         if path == '/api/assessment/lead':
@@ -692,6 +710,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlsplit(self.path).path
+        if path in {'/api/personal-brand', '/api/admin/personal-brand'}:
+            return personal_brand.dispatch(self, connect, admin=path.startswith('/api/admin/'), write=True)
         if path == '/api/assessment/analyze':
             return self.assessment_analyze()
         if path == '/api/assessment/lead':
