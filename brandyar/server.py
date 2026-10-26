@@ -173,9 +173,13 @@ class Handler(BaseHTTPRequestHandler):
         return f'brandysid={token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age={max_age}'
 
     def safe_origin(self):
-        origin = self.headers.get('Origin', '')
         expected = ('https://' if self.headers.get('X-Forwarded-Proto') == 'https' else 'http://') + self.headers.get('Host', '')
-        return bool(origin) and origin == expected
+        origin = self.headers.get('Origin', '')
+        if origin:
+            return origin == expected
+        referer = self.headers.get('Referer', '')
+        parsed = urlsplit(referer)
+        return parsed.scheme + '://' + parsed.netloc == expected and parsed.path.startswith('/')
 
     def throttle(self, db, source, account):
         now = int(time.time())
