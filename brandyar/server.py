@@ -179,7 +179,9 @@ class Handler(BaseHTTPRequestHandler):
             return origin == expected
         referer = self.headers.get('Referer', '')
         parsed = urlsplit(referer)
-        return parsed.scheme + '://' + parsed.netloc == expected and parsed.path.startswith('/')
+        if parsed.scheme + '://' + parsed.netloc == expected and parsed.path.startswith('/'):
+            return True
+        return self.headers.get('Sec-Fetch-Site', '') == 'same-origin'
 
     def throttle(self, db, source, account):
         now = int(time.time())
