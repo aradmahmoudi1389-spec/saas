@@ -39,6 +39,19 @@ def responses_v3(value=3):
     }
 
 
+def responses_v4(value=3):
+    import personal_brand_v4 as monthly
+    body = monthly.template()
+    answers = {
+        1: {key: ([options[0]] if key == 'audience' else options[0]) for key, _, options in body['base']},
+        2: {key: options[0] for key, _, options in body['image']},
+        3: {question['id']: value for question in body['behavior']},
+        4: {'available_proof': [body['evidence'][0][2][0]], 'proud_work': '', 'evidence_need': body['evidence'][2][2][0]},
+        5: {key: options[0] for key, _, options in body['online']},
+    }
+    return answers
+
+
 class MigrationTests(unittest.TestCase):
     def test_upgrade_preserves_published_questions_answers_and_reports(self):
         db = sqlite3.connect(':memory:')
@@ -72,7 +85,7 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(db.execute("SELECT count(*) FROM pb_questions WHERE template_version='pb-test-1'").fetchone()[0], 18)
         self.assertEqual(db.execute("SELECT count(*) FROM pb_questions WHERE template_version='pb-test-24-v2'").fetchone()[0], 24)
         new_id = pb.mutate(db, 'owner', {'action':'start', 'confirmed': True})['id']
-        self.assertEqual(pb.owned(db, new_id, 'owner')['template_version'], 'pb-test-15-v3')
+        self.assertEqual(pb.owned(db, new_id, 'owner')['template_version'], 'pb-test-month-v4')
         self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(), [])
 
 
@@ -204,7 +217,7 @@ class StorageTests(unittest.TestCase):
 
     def test_idempotent_migration_and_report(self):
         pb.initialize(self.db)
-        self.assertEqual(self.db.execute('SELECT count(*) FROM pb_questions').fetchone()[0], 39)
+        self.assertEqual(self.db.execute('SELECT count(*) FROM pb_questions').fetchone()[0], 54)
         identity, report = self.complete()
         again = pb.mutate(self.db, self.owner, {'action': 'report', 'id': identity})['report']
         self.assertEqual(again, report)
@@ -490,7 +503,7 @@ class HTTPFlowTests(unittest.TestCase):
         status, data = post(action='start')
         self.assertEqual(status, 200)
         identity = data['data']['id']
-        for step, answers in responses_v3().items():
+        for step, answers in responses_v4().items():
             status, _ = post(action='save', id=identity, step=step, revision=step-1, answers=answers, elapsed_ms=1000)
             self.assertEqual(status, 200)
         status, report = post(action='report', id=identity)

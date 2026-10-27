@@ -30,7 +30,7 @@ def dumps(value):
 
 def initialize(db):
     exists = db.execute("SELECT 1 FROM sqlite_master WHERE name='pb_schema_migrations'").fetchone()
-    if exists and db.execute('SELECT 1 FROM pb_schema_migrations WHERE version=3').fetchone() and db.execute("SELECT 1 FROM pb_template_versions WHERE id='pb-test-15-v3'").fetchone() and db.execute("SELECT 1 FROM pb_scoring_models WHERE id='pb-score-rules-v3'").fetchone():
+    if exists and db.execute('SELECT 1 FROM pb_schema_migrations WHERE version=4').fetchone() and db.execute("SELECT 1 FROM pb_template_versions WHERE id='pb-test-month-v4'").fetchone() and db.execute("SELECT 1 FROM pb_scoring_models WHERE id='pb-score-month-v4'").fetchone():
         return
     try:
         if not exists:
@@ -66,6 +66,19 @@ def initialize(db):
             scoring_version = max(3, db.execute('SELECT coalesce(max(version),0)+1 FROM pb_scoring_models').fetchone()[0])
             db.execute("UPDATE pb_scoring_models SET status='inactive' WHERE status='published'")
             db.execute('INSERT INTO pb_scoring_models VALUES(?,?,?,?,?,NULL)', ('pb-score-rules-v3', scoring_version, 'published', dumps(model.model_v3()), now()))
+        if not db.execute('SELECT 1 FROM pb_schema_migrations WHERE version=4').fetchone():
+            import personal_brand_v4 as monthly
+            for statement in Path(__file__).with_name('personal_brand_migration_004.sql').read_text().split(';'):
+                if statement.strip():
+                    db.execute(statement)
+            version = db.execute('SELECT coalesce(max(version),0)+1 FROM pb_template_versions').fetchone()[0]
+            scoring_version = db.execute('SELECT coalesce(max(version),0)+1 FROM pb_scoring_models').fetchone()[0]
+            db.execute("UPDATE pb_template_versions SET status='inactive' WHERE status='published'")
+            db.execute("UPDATE pb_scoring_models SET status='inactive' WHERE status='published'")
+            body = monthly.template()
+            db.execute('INSERT INTO pb_template_versions VALUES(?,?,?,?,?,?,NULL)', (monthly.TEMPLATE_ID, 'personal-brand', version, 'published', dumps(body), now()))
+            save_questions(db, monthly.TEMPLATE_ID, body)
+            db.execute('INSERT INTO pb_scoring_models VALUES(?,?,?,?,?,NULL)', (monthly.MODEL_ID, scoring_version, 'published', dumps(monthly.model()), now()))
         db.commit()
     except Exception:
         db.rollback()
@@ -78,6 +91,23 @@ def save_questions(db, version, body):
         db.execute('INSERT INTO pb_questions VALUES(?,?,?,?,?)', (q['id'], version, q['dimension'], q['title'], q.get('order', i)))
         db.execute('INSERT INTO pb_question_rules VALUES(?,?,?,?)', (q['id'], version, q.get('weight', 1), int(q.get('active', True))))
         db.executemany('INSERT INTO pb_question_options VALUES(?,?,?,?)', [(q['id'], version, n + 1, title) for n, title in enumerate(body['likert'])])
+
+
+def save_response_records(db, row, body, answers):
+    if body.get('schema') != 4:
+        return
+    ids = [question[0] for section in ('base', 'image') for question in body[section]]
+    ids += json.loads(row['question_order'])
+    ids += [question[0] for section in ('evidence', 'online') for question in body[section]]
+    for key in body['other']:
+        if key in answers and key + '_other' not in answers:
+            db.execute('DELETE FROM pb_response_records WHERE assessment_id=? AND question_id=?', (row['id'], key + '_other'))
+    for key, value in answers.items():
+        display_key = key.removesuffix('_other')
+        if display_key not in ids:
+            continue
+        db.execute('INSERT INTO pb_response_records VALUES(?,?,?,?,?,?) ON CONFLICT(assessment_id,question_id) DO UPDATE SET value_json=excluded.value_json,recorded_at=excluded.recorded_at WHERE pb_response_records.value_json<>excluded.value_json',
+                   (row['id'], key, row['template_version'], dumps(value), now(), ids.index(display_key)))
 
 
 def audit(db, actor, action, entity='', context=None):
@@ -136,6 +166,12 @@ def lead_registered(db, owner, assessment_id):
     return db.execute('SELECT 1 FROM pb_leads WHERE owner_hash=? AND assessment_id=?', (owner, assessment_id)).fetchone() is not None
 
 
+def report_available(db, owner, identity):
+    row = owned(db, identity, owner)
+    template = db.execute('SELECT body FROM pb_template_versions WHERE id=?', (row['template_version'],)).fetchone()
+    return json.loads(template['body']).get('schema') == 4 or lead_registered(db, owner, identity)
+
+
 def normalize_phone(value):
     if not isinstance(value, str):
         raise ValueError('شمارهٔ موبایل را وارد کنید.')
@@ -179,10 +215,11 @@ def create_report(db, row, reason, scoring_version=None):
     if not selected:
         raise ValueError('نسخهٔ منتشرشدهٔ مدل موجود نیست.')
     scoring = json.loads(selected[0])
-    connection = instagram_context(db, row['owner_hash'])
-    if answers[5]['choice'] == 'connected' and not connection:
+    connection = instagram_context(db, row['owner_hash']) if template.get('schema') != 4 else None
+    choice = answers[5].get('choice', 'skip')
+    if choice == 'connected' and not connection:
         raise ValueError('همگام‌سازی معتبر موجود نیست؛ دوباره همگام‌سازی یا ادامه بدون اتصال را انتخاب کنید.')
-    if answers[5]['choice'] == 'skip':
+    if choice == 'skip':
         connection = None
     for step, answer in answers.items():
         model.validate_step(step, answer, template)
@@ -251,6 +288,9 @@ def mutate(db, owner, data):
         body = json.loads(version['body'])
         questions = body.get('items') or body.get('behavior') or []
         order = [q['id'] for q in sorted(questions, key=lambda q: q.get('order', 0)) if q.get('active', True)]
+        if body.get('schema') == 4:
+            from personal_brand_v4 import question_order
+            order = question_order(body)
         identity = uid()
         db.execute('INSERT INTO pb_assessments VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', (identity, owner, version['id'], scoring['id'], dumps(order), 'draft', 0, 0, now(), now(), None, None))
         row = owned(db, identity, owner)
@@ -300,7 +340,8 @@ def mutate(db, owner, data):
         if type(step) is not int or not 1 <= step <= 5:
             raise ValueError('مرحله معتبر نیست.')
         body = json.loads(db.execute('SELECT body FROM pb_template_versions WHERE id=?', (row['template_version'],)).fetchone()[0])
-        answers = model.validate_partial_v3(step, data.get('answers'), body)
+        answers = model.validate_partial(step, data.get('answers'), body)
+        save_response_records(db, row, body, answers)
         db.execute('INSERT INTO pb_answer_drafts VALUES(?,?,?,?) ON CONFLICT(assessment_id,step) DO UPDATE SET body=excluded.body,updated_at=excluded.updated_at', (row['id'], step, dumps(answers), now()))
         return {'ok': True}
     if action == 'edit':
@@ -315,6 +356,7 @@ def mutate(db, owner, data):
             raise ValueError('مرحله معتبر نیست.')
         body = json.loads(db.execute('SELECT body FROM pb_template_versions WHERE id=?', (row['template_version'],)).fetchone()[0])
         normalized = model.validate_step(step, data.get('answers'), body)
+        save_response_records(db, row, body, normalized)
         elapsed = data.get('elapsed_ms', 0)
         if type(elapsed) is not int or not 0 <= elapsed <= 86400000:
             raise ValueError('زمان پاسخ معتبر نیست.')
@@ -330,7 +372,7 @@ def mutate(db, owner, data):
             db.execute('INSERT INTO pb_evidence VALUES(?,?,?,?)', (uid(), row['id'], dumps(normalized), now()))
         db.execute('UPDATE pb_assessments SET stage=max(stage,?),revision=revision+1,updated_at=? WHERE id=?', (step, now(), row['id']))
         event(db, owner, row, 'step_completed', f'step:{row["id"]}:{step}', step)
-        if step == 5:
+        if step == 5 and 'choice' in normalized:
             event(db, owner, row, 'instagram_skipped' if normalized['choice'] == 'skip' else 'instagram_selected', 'choice:' + row['id'])
         return {'revision': row['revision'] + 1}
     if action == 'report':
@@ -586,17 +628,17 @@ def dispatch(handler, connect, admin=False, write=False):
                         db.execute('BEGIN IMMEDIATE')
                         if data.get('action') == 'edit':
                             raise PermissionError('برای شروع دوباره، در صفحهٔ نتیجه تأیید کن.')
-                        if data.get('action') == 'export_report' and not lead_registered(db, owner, data.get('id')):
+                        if data.get('action') == 'export_report' and not report_available(db, owner, data.get('id')):
                             raise PermissionError('برای دریافت گزارش، ابتدا آن را با شمارهٔ موبایل باز کنید.')
                         result = mutate(db, owner, data)
-                        if data.get('action') == 'report' and not lead_registered(db, owner, data.get('id')):
+                        if data.get('action') == 'report' and not report_available(db, owner, data.get('id')):
                             result['report'] = report_preview(result['report'])
                     audit(db, owner, 'request:' + str(data.get('action', '')), '')
                 elif query.get('action', [''])[0] == 'bootstrap':
                     result = {'csrf': principal['csrf'], 'instagram_available': instagram.configured(), 'connection': public_connection(latest_connection(db, owner)), 'assessments': [dict(r) for r in db.execute('SELECT id,state,stage,created_at FROM pb_assessments WHERE owner_hash=? AND archived_at IS NULL ORDER BY created_at DESC', (owner,))]}
                 else:
                     row = owned(db, query.get('id', [''])[0], owner)
-                    result = assessment_data(db, row, full=admin or lead_registered(db, owner, row['id']))
+                    result = assessment_data(db, row, full=admin or report_available(db, owner, row['id']))
             db.commit()
         return handler.json(200, {'ok': True, 'data': result, 'request_id': trace}, headers)
     except PermissionError as error:

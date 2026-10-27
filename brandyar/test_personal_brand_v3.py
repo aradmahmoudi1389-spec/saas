@@ -92,6 +92,11 @@ class VersionThreeTests(unittest.TestCase):
 
 class VersionThreeHTTPTests(BaseHTTP):
     def test_autosave_resume_lead_gate_and_restart(self):
+        with __import__('server').connect() as db:
+            db.execute("UPDATE pb_template_versions SET status='inactive' WHERE status='published'")
+            db.execute("UPDATE pb_scoring_models SET status='inactive' WHERE status='published'")
+            db.execute("UPDATE pb_template_versions SET status='published' WHERE id='pb-test-15-v3'")
+            db.execute("UPDATE pb_scoring_models SET status='published' WHERE id='pb-score-rules-v3'")
         status, bootstrap, cookie = self.call()
         self.assertEqual(status, 200)
         csrf = bootstrap['data']['csrf']

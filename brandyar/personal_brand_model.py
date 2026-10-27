@@ -353,8 +353,23 @@ _legacy_validate_template=validate_template
 _legacy_validate_model=validate_model
 _legacy_score=score
 
-def validate_step(step,data,body): return validate_step_v3(step,data,body) if body.get('schema')==3 else _legacy_validate_step(step,data,body)
+def validate_step(step, data, body):
+    if body.get('schema') == 4:
+        from personal_brand_v4 import validate
+        return validate(step, data, body)
+    return validate_step_v3(step, data, body) if body.get('schema') == 3 else _legacy_validate_step(step, data, body)
+
+
+def validate_partial(step, data, body):
+    if body.get('schema') == 4:
+        from personal_brand_v4 import validate
+        return validate(step, data, body, partial=True)
+    return validate_partial_v3(step, data, body)
+
 def validate_template(body):
+    if body.get('schema') == 4:
+        from personal_brand_v4 import validate_template as validate
+        return validate(body)
     if body.get('schema')==3:
         original=template_v3()
         if set(body)!=set(original) or len(body.get('behavior',[]))!=15 or len(body.get('sections',[]))!=5:
@@ -373,6 +388,9 @@ def validate_template(body):
         return
     return _legacy_validate_template(body)
 def validate_model(body):
+    if body.get('schema') == 4:
+        from personal_brand_v4 import validate_model as validate
+        return validate(body)
     if body.get('schema')==3:
         expected = model_v3()
         if set(body) != set(expected) or not isinstance(body['dimensions'], dict) or set(body['dimensions']) != set(expected['dimensions']) or any(body[key] != expected[key] for key in ('schema', 'thresholds', 'method', 'analysis_version')):
@@ -383,6 +401,11 @@ def validate_model(body):
         return
     return _legacy_validate_model(body)
 def score(answers, body, scoring, instagram=None):
+    if body.get('schema') == 4 or scoring.get('schema') == 4:
+        if body.get('schema') != scoring.get('schema'):
+            raise ValueError('نسخهٔ پاسخ‌ها با این نتیجه هماهنگ نیست.')
+        from personal_brand_v4 import score as monthly_score
+        return monthly_score(answers, body, scoring)
     if (body.get('schema') == 3) != (scoring.get('schema') == 3):
         raise ValueError('نسخهٔ مدل باید با نسخهٔ ارزیابی هماهنگ باشد.')
     return score_v3(answers, body, scoring, instagram) if body.get('schema') == 3 else _legacy_score(answers, body, scoring, instagram)

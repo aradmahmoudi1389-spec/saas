@@ -49,7 +49,7 @@
   function selection(key,title,options,saved,multiple=false){return `<fieldset class="question-card"><legend>${esc(title)} *</legend>${multiple?'<small>یک یا حداکثر دو گزینه انتخاب کنید.</small>':''}<div class="choice-grid">${options.map((v,i)=>`<label class="choice"><input type="${multiple?'checkbox':'radio'}" name="${esc(key)}" value="${esc(v)}" ${multiple?(Array.isArray(saved)&&saved.includes(v)?'checked':''):(saved===v?'checked':'')} ${multiple?'':'required'}><span>${esc(v)}</span></label>`).join('')}</div></fieldset>`;}
   let draftTimer, draftPending, draftQueue=Promise.resolve();
   function persistDraft(form) {
-    if(!current||current.template.schema!==3)return;
+    if(!current||![3,4].includes(current.template.schema))return;
     const values=formValues(form);
     if(step===3)for(const key in values)values[key]=Number(values[key]);
     current.answers[String(step)]=values;
@@ -64,7 +64,15 @@
     if(draftPending){const body=draftPending;draftPending=null;draftQueue=draftQueue.then(()=>api('',body)).then(()=>{if($('save-state'))$('save-state').textContent='پاسخ‌هایت ذخیره شده و می‌توانی بعداً ادامه بدهی.';}).catch(()=>{if($('save-state'))$('save-state').textContent='پاسخ‌هایت حفظ شده؛ وقتی ارتباط برقرار شد ادامه بده.';});}
     await draftQueue;
   }
-  function formValues(form){const entries=[...new FormData(form)],values=Object.fromEntries(entries);if(form.id==='step-form'&&step===1&&current?.template.barriers)values.barrier=entries.filter(([key])=>key==='barrier').map(([,v])=>v);if(form.id==='step-form'&&current?.template.schema===3&&step===1)values.audience=entries.filter(([key])=>key==='audience').map(([,v])=>v);if(form.id==='step-form'&&current?.template.schema===3&&step===4)values.proof=entries.filter(([key])=>key==='proof').map(([,v])=>v);return values;}
+  function formValues(form){
+    const entries=[...new FormData(form)],values=Object.fromEntries(entries);
+    if(form.id==='step-form'){
+      if(step===1&&current?.template.barriers)values.barrier=entries.filter(([key])=>key==='barrier').map(([,v])=>v);
+      if([3,4].includes(current?.template.schema)&&step===1)values.audience=entries.filter(([key])=>key==='audience').map(([,v])=>v);
+      if([3,4].includes(current?.template.schema)&&step===4){const key=current.template.schema===4?'available_proof':'proof';values[key]=entries.filter(([name])=>name===key).map(([,v])=>v);}
+    }
+    return values;
+  }
   async function load() {
     $('feedback').textContent='در حال آماده‌سازی ارزیابی…';
     bootstrap=await api(admin?'':'?action=bootstrap');csrf=bootstrap.csrf;
@@ -92,6 +100,7 @@
   function paintStep() {
     const t=current.template,id=current.assessment.id,saved={...(current.answers[String(step)]||{})};
     try{Object.assign(saved,JSON.parse(localStorage.getItem('pb-draft-'+id+'-'+step)||'{}'));}catch{}
+    if(t.schema===4){paintV4Step();return;}
     if(t.schema!==3){paintLegacyStep();return;}
     const section=t.sections[step-1],remaining=step===3?15:Object.keys(step===1?t.base:step===2?t.image:step===4?t.evidence:t.online).length;
     let form='';
@@ -104,6 +113,20 @@
     if(step===5)$('app').insertAdjacentHTML('beforeend',connectionPanel());
     if(step===3)$('app').insertAdjacentHTML('beforeend',`<details class="question-feedback"><summary>یکی از سؤال‌ها برایت روشن نبود؟</summary><form id="question-feedback"><label>سؤال<select name="question_id">${t.behavior.map((q,i)=>`<option value="${q.id}">${n(i+1)}. ${esc(q.title)}</option>`).join('')}</select></label><label>وضوح سؤال<select name="clarity"><option value="1">برایم مبهم بود</option><option value="2">تا حدی روشن بود</option><option value="3">کاملاً روشن بود</option></select></label><button>ثبت بازخورد</button></form></details>`);
   }
+  function v4Selection(key,title,options,saved,multiple=false){return `<fieldset class="question-card"><legend>${esc(title)} *</legend>${multiple?`<small>${key==='audience'?'حداکثر دو گزینه را انتخاب کن.':'می‌توانی چند گزینه را انتخاب کنی.'}</small>`:''}<div class="choice-grid">${options.map(value=>`<label class="choice"><input type="${multiple?'checkbox':'radio'}" name="${esc(key)}" value="${esc(value)}" ${multiple?(Array.isArray(saved)&&saved.includes(value)?'checked':''):(saved===value?'checked':'')} ${multiple?'':'required'}><span>${esc(value)}</span></label>`).join('')}</div></fieldset>`;}
+  function v4Text(key,title,value='',placeholder=''){const other=key==='proud_work'?'':` data-other-for="${esc(key)}"`;return `<label class="question-card"${other}>${esc(title)}<input name="${esc(key)}" value="${esc(value)}" maxlength="${key==='proud_work'?'300':'200'}" placeholder="${esc(placeholder)}"></label>`;}
+  function updateV4Other(form){const values=formValues(form),map=current.template.other;for(const label of form.querySelectorAll('[data-other-for]')){const key=label.dataset.otherFor,source=key.endsWith('_other')?key.slice(0,-6):key,chosen=values[source],visible=map[source]&&(Array.isArray(chosen)?chosen.includes(map[source]):chosen===map[source]);label.hidden=!visible;label.querySelector('input').disabled=!visible;}}
+  function paintV4Step(){
+    const t=current.template,id=current.assessment.id,saved={...(current.answers[String(step)]||{})};try{Object.assign(saved,JSON.parse(localStorage.getItem('pb-draft-'+id+'-'+step)||'{}'));}catch{}
+    const section=t.sections[step-1],fields=step===1?t.base:step===2?t.image:step===4?t.evidence:t.online;let form='';
+    if(step===1)form=fields.map(([key,title,options])=>v4Selection(key,title,options,saved[key],key==='audience')).join('')+v4Text('field_other','اگر دوست داری، موضوعت را بنویس.',saved.field_other)+v4Text('primary_goal_other','اگر دوست داری، هدفت را بنویس.',saved.primary_goal_other)+v4Text('audience_other','اگر دوست داری، گروهت را بنویس.',saved.audience_other)+v4Text('current_situation_other','اگر دوست داری، وضعیتت را بنویس.',saved.current_situation_other);
+    else if(step===2)form=fields.map(([key,title,options])=>v4Selection(key,title,options,saved[key])).join('');
+    else if(step===3)form=current.order.map(id=>t.behavior.find(q=>q.id===id)).map((q,index)=>`<fieldset class="question-card"><legend>${n(index+1)}. ${esc(q.title)}</legend><div class="likert">${t.likert.map((label,i)=>`<label class="choice"><input type="radio" name="${q.id}" value="${i+1}" ${Number(saved[q.id])===i+1?'checked':''} required><span>${esc(label)}</span></label>`).join('')}</div></fieldset>`).join('');
+    else if(step===4)form=v4Selection('available_proof',fields[0][1],fields[0][2],saved.available_proof,true)+v4Text('proud_work',fields[1][1],saved.proud_work,'حتی یک تجربهٔ کوچک هم می‌تواند کافی باشد.')+v4Selection('evidence_need',fields[2][1],fields[2][2],saved.evidence_need);
+    else form=fields.map(([key,title,options])=>v4Selection(key,title,options,saved[key])).join('');
+    if(step!==3)form+=fields.filter(([key])=>t.other[key]&&step!==1).map(([key])=>v4Text(key+'_other','اگر دوست داری، کوتاه بنویس.',saved[key+'_other'])).join('');
+    const remaining=step===3?15:fields.length;$('app').innerHTML=`<div class="stage-progress"><div><strong>بخش ${n(step)} از ۵</strong><span>حدود ${n(remaining)} سؤال در این بخش</span></div><progress max="5" value="${step}" aria-label="پیشرفت ارزیابی"></progress></div><nav class="step-navigation">${t.sections.map((value,index)=>`<span ${index+1===step?'aria-current="step"':''}>${n(index+1)}. ${esc(value.title)}</span>`).join(' · ')}</nav><section><h2 id="stage-heading" tabindex="-1">${esc(section.title)}</h2><p class="stage-description">${esc(section.description)}</p><form id="step-form">${form}<div class="actions">${button(step>1?'previous':'home','بازگشت')}<button type="submit">ادامه</button></div></form><p id="save-state" role="status">پاسخ‌هایت ذخیره می‌شود.</p></section>`;started=Date.now();updateV4Other($('step-form'));$('stage-heading')?.focus?.();
+  }
   function paintLegacyStep(){
     const t=current.template,id=current.assessment.id,saved=current.answers[String(step)]||{},names=['وضعیت حرفه‌ای و هدف','هویت و جایگاه','رفتارهای برندسازی','شواهد اختیاری','اتصال اختیاری اینستاگرام'];
     let form='';if(step===1||step===2||step===4){const fields=step===1?t.base:step===2?t.identity:t.evidence.map(v=>[...v,false]);form=fields.map(([key,title,required])=>step===1&&t.statuses&&key==='professional_status'?selection(key,title,t.statuses,saved[key])+selection('goal','مهم‌ترین هدف شما از ساخت پرسونال برند چیست؟',t.goals,saved.goal):step===1&&t.barriers&&key==='barrier'?selection(key,title,t.barriers,saved[key],true):field(key,title,saved[key],required)).join('');if(step===1&&!t.statuses)form+=`<label>هدف اصلی برند *<select name="goal" required><option value="">انتخاب کنید</option>${t.goals.map(v=>`<option ${saved.goal===v?'selected':''}>${esc(v)}</option>`).join('')}</select></label>`;}else if(step===3){form=current.order.map(id=>t.items.find(q=>q.id===id)).map(q=>`<fieldset class="question-card"><legend>${esc(q.title)}</legend><div class="likert">${t.likert.map((label,i)=>`<label class="choice"><input type="radio" name="${q.id}" value="${i+1}" ${Number(saved[q.id])===i+1?'checked':''} required><span>${esc(label)}</span></label>`).join('')}</div></fieldset>`).join('');}else form='<p>اگر دوست داری، بدون اتصال ادامه بده.</p><button type="submit" name="skip">ادامه بدون اتصال</button>';
@@ -114,6 +137,9 @@
     return `<section><h2>هدفت و صفحه‌ای که دیده می‌شود</h2><p>هدف تو: ${esc(report.goal)}</p><p>معرفی صفحه: ${esc(ig.profile.biography||'متن معرفی در دسترس نبود.')}</p><p>بررسی ${n(ig.observations.sample_size)} محتوای دریافت‌شده در ${date(ig.synced_at)}</p><p>موضوع‌های تکرارشونده در هشتگ‌ها: ${ig.observations.hashtags.map(v=>esc(v[0])).join('، ')||'هشتگ تکرارشونده‌ای در این نمونه دیده نشد.'}</p><p>این موضوع‌ها چقدر همان چیزی را نشان می‌دهند که می‌خواهی با آن شناخته شوی؟ این داده‌ها به‌تنهایی هماهنگی معنایی یا کیفیت محتوا را تأیید نمی‌کنند.</p>${ig.synced_at<Date.now()/1000-86400?'<p>این تصویر مربوط به آخرین دریافت است و ممکن است صفحه‌ات بعد از آن تغییر کرده باشد.</p>':''}</section>`;
   }
   function reportView(report) {
+    if(report.analysis_version==='monthly-behavior-v4'){
+      return `<section class="result-hero"><p>گزارش شخصی تو</p><h2>امتیاز کلی: ${n(report.total)} از ۱۰۰</h2><p>مرحلهٔ فعلی: ${esc(report.stage)}</p><p>${esc(report.summary)}</p></section><div class="grid">${report.dimensions.map(d=>`<article class="card"><h3>${esc(d.title)}</h3><progress max="100" value="${d.score}" aria-label="${esc(d.title)}"></progress><p>${n(d.score)} از ۱۰۰</p></article>`).join('')}</div><section><h2>نقطهٔ قوت</h2><p>${esc(report.strength)}</p><h2>فرصت رشد</h2><p>${esc(report.top_opportunity)}</p><h2>اقدام ابتدایی</h2><p>${esc(report.starter_action)}</p><h2>سؤال برای ادامه</h2><p>${esc(report.challenge_question)}</p><p class="muted">${esc(report.disclaimer)}</p></section>`;
+    }
     if(report.top_opportunity){
       if(!current?.report_unlocked||!report.dimensions)return `<section class="result-hero"><p>نتیجهٔ اولیهٔ ارزیابی تو</p><h2>امتیاز فعلی پرسونال برندت: ${n(report.total)} از ۱۰۰</h2><p>مرحلهٔ فعلی: ${esc(report.stage)}</p><p>${esc(report.summary)}</p>${report.preview_opportunities?.length?`<p>فرصت‌های رشد: ${report.preview_opportunities.map(esc).join('، ')}</p>`:''}<p>این نتیجه یک تصویر کلی از وضعیت فعلی توست و قرار نیست ارزش یا توانایی‌ات را قضاوت کند.</p></section><section class="lead-card"><h2>گزارش کاملت آماده است</h2><p>شماره‌ات را وارد کن تا نتیجهٔ کامل، امتیاز بخش‌ها و تحلیل شخصی‌سازی‌شده‌ات را ببینی.</p><form id="lead-form"><label>شمارهٔ موبایل<input name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="24" aria-describedby="lead-error" required></label><label class="consent"><input name="consent" type="checkbox" required>با ذخیرهٔ شماره برای نمایش این گزارش موافقم.</label><p id="lead-error" class="form-error" role="alert"></p><button type="submit">مشاهدهٔ نتیجهٔ کامل</button></form><button type="button" data-action="later">بعداً وارد می‌کنم</button></section>`;
       return `<section class="result-hero"><p>گزارش شخصی تو</p><h2>امتیاز فعلی تو: ${n(report.total)} از ۱۰۰</h2><p>مرحلهٔ فعلی: ${esc(report.stage)}</p><p>${esc(report.summary)}</p></section><section><h2>الان کجای مسیر هستی؟</h2><p>${esc(report.summary)}</p><p>${esc(report.limitations[0])}</p></section><div class="grid">${report.dimensions.map(d=>`<article class="card"><h3>${esc(d.title)}</h3><progress max="100" value="${d.score}" aria-label="${esc(d.title)}"></progress><p>${n(d.score)} از ۱۰۰ · ${esc(d.interpretation)}</p></article>`).join('')}</div><section><h2>مهم‌ترین نقطهٔ قوت</h2><p>${esc(report.strength)}</p><ul>${report.points.map(v=>`<li>${esc(v)}</li>`).join('')}</ul><h3>چرا این نتیجه را گرفتی؟</h3><p>${esc(report.reason)}</p><h2>مهم‌ترین فرصت رشد</h2><p>${esc(report.top_opportunity)}</p><p>${esc(report.starter_action)}</p><h3>یک سؤال برای ادامه</h3><p>${esc(report.challenge_question)}</p></section>${instagramView(report)}`;
@@ -129,7 +155,7 @@
     const reports=current.reports;
     $('app').innerHTML=reports.length?reportView(reports[0].body):'<section><h2>گزارشی موجود نیست</h2><p>دادهٔ اینستاگرام یا گزارش قبلاً حذف شده است؛ برای تولید مجدد، ارزیابی تازه بسازید.</p></section>';
     if(reports.length>1&&reports[0].body.dimensions)$('app').insertAdjacentHTML('beforeend',`<section><h2>مقایسهٔ آخرین دو نسخه</h2>${reports[0].body.dimensions.map((d,i)=>`<p>${esc(d.title)}: ${n(reports[1].body.dimensions[i].score)} ← ${n(d.score)}</p>`).join('')}</section>`);
-    $('app').insertAdjacentHTML('beforeend',connectionPanel());
+    if(current.template.schema!==4)$('app').insertAdjacentHTML('beforeend',connectionPanel());
     $('app').insertAdjacentHTML('beforeend',actions(button('home','بازگشت')+button('edit','انجام دوبارهٔ ارزیابی',current.assessment.id)+(current.report_unlocked&&reports.length?button('export_report','دریافت گزارش'):'')));
   }
   function paintAdmin(){
@@ -145,7 +171,8 @@
     if(event.target.id==='filter'){for(const row of document.querySelectorAll('[data-row]'))row.hidden=!row.textContent.includes(event.target.value);return;}
     const form=event.target.closest('#step-form');if(!form||!current)return;
     if(['barrier','audience'].includes(event.target.name)&&form.querySelectorAll(`input[name="${event.target.name}"]:checked`).length>2){event.target.checked=false;$('feedback').textContent='حداکثر دو گزینه را انتخاب کن.';return;}
-    if(current.template.schema===3){persistDraft(form);updateOtherFields(form);return;}
+    if(current.template.schema===4&&event.target.name==='available_proof'&&event.target.checked){for(const input of form.querySelectorAll('input[name="available_proof"]')){if(input!==event.target&&(event.target.value==='هنوز چیز مشخصی ندارم'||input.value==='هنوز چیز مشخصی ندارم'))input.checked=false;}}
+    if([3,4].includes(current.template.schema)){if(current.template.schema===3)updateOtherFields(form);else updateV4Other(form);persistDraft(form);return;}
     const values=formValues(form);try{localStorage.setItem('pb-draft-'+current.assessment.id+'-'+step,JSON.stringify(values));if($('save-state'))$('save-state').textContent='پاسخ‌هایت ذخیره شده و می‌توانی بعداً ادامه بدهی.';}catch{$('feedback').textContent='پاسخ‌هایت با زدن «ادامه» ذخیره می‌شود.';}
     const count=form.querySelector(`[data-count="${event.target.name}"]`);if(count)count.textContent=n(event.target.value.length)+' از '+n(event.target.maxLength)+' نویسه';
   });
@@ -168,7 +195,7 @@
         finishFocus();
         if(step===3)for(const key in values)values[key]=Number(values[key]);
         let answers=values;
-        if(step===5)answers=current.template.schema===3?{...values,choice:submitter?.name==='connected'?'connected':'skip'}:{choice:submitter?.name==='connected'?'connected':'skip',introduction:values.introduction||''};
+        if(step===5&&current.template.schema!==4)answers={...values,choice:submitter?.name==='connected'?'connected':'skip'};
         const id=current.assessment.id;
         const saved=await api('',{action:'save',id,revision:current.assessment.revision,step,answers,question_times:step===3?questionTimes:{},elapsed_ms:Math.min(Date.now()-started,86400000)});
         current.assessment.revision=saved.revision;current.answers[String(step)]=answers;try{localStorage.removeItem('pb-draft-'+id+'-'+step);}catch{}
