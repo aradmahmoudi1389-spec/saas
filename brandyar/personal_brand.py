@@ -37,7 +37,13 @@ def initialize(db):
             db.executescript('BEGIN IMMEDIATE;\n' + Path(__file__).with_name('personal_brand_migration_001.sql').read_text())
             db.execute('INSERT INTO pb_templates VALUES(?,?,?)', ('personal-brand', model.TITLE, now()))
             db.commit()
-        db.executescript('BEGIN IMMEDIATE;\n' + Path(__file__).with_name('personal_brand_migration_002.sql').read_text())
+        db.execute('BEGIN IMMEDIATE')
+        if db.execute('SELECT 1 FROM pb_schema_migrations WHERE version=2').fetchone():
+            db.commit()
+            return
+        for statement in Path(__file__).with_name('personal_brand_migration_002.sql').read_text().split(';'):
+            if statement.strip():
+                db.execute(statement)
         version = max(2, db.execute('SELECT coalesce(max(version),0)+1 FROM pb_template_versions').fetchone()[0])
         db.execute("UPDATE pb_template_versions SET status='inactive' WHERE status='published'")
         body = model.template()
@@ -54,7 +60,8 @@ def initialize(db):
 
 def save_questions(db, version, body):
     for i, q in enumerate(body['items']):
-        db.execute('INSERT INTO pb_questions(id,template_version,dimension,title,position,weight,active) VALUES(?,?,?,?,?,?,?)', (q['id'], version, q['dimension'], q['title'], q.get('order', i), q.get('weight', 1), int(q.get('active', True))))
+        db.execute('INSERT INTO pb_questions VALUES(?,?,?,?,?)', (q['id'], version, q['dimension'], q['title'], q.get('order', i)))
+        db.execute('INSERT INTO pb_question_rules VALUES(?,?,?,?)', (q['id'], version, q.get('weight', 1), int(q.get('active', True))))
         db.executemany('INSERT INTO pb_question_options VALUES(?,?,?,?)', [(q['id'], version, n + 1, title) for n, title in enumerate(body['likert'])])
 
 
