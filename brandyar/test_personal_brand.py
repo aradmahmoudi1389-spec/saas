@@ -28,6 +28,17 @@ def responses(value=3):
     }
 
 
+def responses_v3(value=3):
+    body = model.template_v3()
+    return {
+        1: {key: [options[0]] if key == 'audience' else options[0] for key, _, options in body['base']},
+        2: {key: options[0] for key, _, options in body['image']},
+        3: {q['id']: value for q in body['behavior']},
+        4: {'proof': [body['evidence'][0][2][0]], 'experience': '', 'need': body['evidence'][2][2][0]},
+        5: {**{key: options[0] for key, _, options in body['online']}, 'choice': 'skip'},
+    }
+
+
 class MigrationTests(unittest.TestCase):
     def test_upgrade_preserves_published_questions_answers_and_reports(self):
         db = sqlite3.connect(':memory:')
@@ -60,8 +71,8 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(db.execute("SELECT raw_json FROM pb_answers WHERE assessment_id='assessment'").fetchone()[0], '{"identity_1":4}')
         self.assertEqual(db.execute("SELECT count(*) FROM pb_questions WHERE template_version='pb-test-1'").fetchone()[0], 18)
         self.assertEqual(db.execute("SELECT count(*) FROM pb_questions WHERE template_version='pb-test-24-v2'").fetchone()[0], 24)
-        new_id = pb.mutate(db, 'owner', {'action':'start'})['id']
-        self.assertEqual(pb.owned(db, new_id, 'owner')['template_version'], 'pb-test-24-v2')
+        new_id = pb.mutate(db, 'owner', {'action':'start', 'confirmed': True})['id']
+        self.assertEqual(pb.owned(db, new_id, 'owner')['template_version'], 'pb-test-15-v3')
         self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(), [])
 
 
@@ -156,6 +167,8 @@ class StorageTests(unittest.TestCase):
         self.db.execute('CREATE TABLE staff(id INTEGER PRIMARY KEY)')
         self.db.execute('INSERT INTO staff VALUES(1)')
         pb.initialize(self.db)
+        self.db.execute("UPDATE pb_template_versions SET status=CASE id WHEN 'pb-test-24-v2' THEN 'published' ELSE 'inactive' END")
+        self.db.execute("UPDATE pb_scoring_models SET status=CASE id WHEN 'pb-score-rules-v2' THEN 'published' ELSE 'inactive' END")
         self.owner = 'test-owner'
         self.db.execute('INSERT INTO pb_sessions VALUES(?,?,?,?)', (self.owner, 'test-csrf', pb.now(), pb.now() + 86400))
         self.db.commit()
@@ -163,7 +176,7 @@ class StorageTests(unittest.TestCase):
         self.addCleanup(self.db.close)
 
     def complete(self, values=None):
-        identity = pb.mutate(self.db, self.owner, {'action': 'start'})['id']
+        identity = pb.mutate(self.db, self.owner, {'action': 'start', 'confirmed': True})['id']
         for step, answers in (values or responses()).items():
             pb.mutate(self.db, self.owner, {'action': 'save', 'id': identity, 'step': step, 'revision': step - 1, 'answers': answers, 'elapsed_ms': 1500})
         result = pb.mutate(self.db, self.owner, {'action': 'report', 'id': identity})['report']
@@ -191,7 +204,7 @@ class StorageTests(unittest.TestCase):
 
     def test_idempotent_migration_and_report(self):
         pb.initialize(self.db)
-        self.assertEqual(self.db.execute('SELECT count(*) FROM pb_questions').fetchone()[0], 24)
+        self.assertEqual(self.db.execute('SELECT count(*) FROM pb_questions').fetchone()[0], 39)
         identity, report = self.complete()
         again = pb.mutate(self.db, self.owner, {'action': 'report', 'id': identity})['report']
         self.assertEqual(again, report)
@@ -213,7 +226,7 @@ class StorageTests(unittest.TestCase):
         body['dimensions'] = {key: .1 for key in body['dimensions']}
         body['dimensions']['identity'] = .5
         pb.admin_mutate(self.db, self.staff, {'action': 'model_draft', 'body': body, 'confirmed': True, 'reason': 'آزمایش وزن تازه'})
-        selected = self.db.execute('SELECT id FROM pb_scoring_models WHERE version=3').fetchone()[0]
+        selected = self.db.execute('SELECT id FROM pb_scoring_models ORDER BY version DESC LIMIT 1').fetchone()[0]
         pb.admin_mutate(self.db, self.staff, {'action': 'model_publish', 'id': selected, 'confirmed': True, 'reason': 'انتشار آزمایشی'})
         pb.admin_mutate(self.db, self.staff, {'action': 'regenerate', 'id': identity, 'scoring_version': selected, 'confirmed': True, 'reason': 'مقایسهٔ مدل‌ها'})
         data = pb.assessment_data(self.db, pb.owned(self.db, identity, self.owner))
@@ -256,11 +269,11 @@ class StorageTests(unittest.TestCase):
             pb.event(self.db, self.owner, None, 'test', 'same')
         self.assertEqual(self.db.execute("SELECT count(*) FROM pb_events WHERE event='test'").fetchone()[0], 1)
 
-    def test_start_rate_limit(self):
-        for _ in range(10):
-            pb.mutate(self.db, self.owner, {'action': 'start'})
-        with self.assertRaises(ValueError):
-            pb.mutate(self.db, self.owner, {'action': 'start'})
+    def test_start_reuses_incomplete_assessment(self):
+        identity = pb.mutate(self.db, self.owner, {'action': 'start'})['id']
+        for _ in range(12):
+            self.assertEqual(pb.mutate(self.db, self.owner, {'action': 'start'})['id'], identity)
+        self.assertEqual(self.db.execute('SELECT count(*) FROM pb_assessments').fetchone()[0], 1)
 
     def test_filters_export_and_question_times(self):
         identity, _ = self.complete()
@@ -275,7 +288,7 @@ class StorageTests(unittest.TestCase):
         analyst = {'role': 'analyst', 'staff_id': 1}
         with self.assertRaises(PermissionError):
             pb.admin_read(self.db, analyst, {'action': ['validation_export']})
-        draft = pb.mutate(self.db, self.owner, {'action': 'start'})['id']
+        draft = pb.mutate(self.db, self.owner, {'action': 'start', 'confirmed': True})['id']
         pb.mutate(self.db, self.owner, {'action': 'save', 'id': draft, 'revision': 0, 'step': 3, 'answers': responses()[3], 'question_times': {'identity_1': 1500}})
         self.assertEqual(self.db.execute('SELECT elapsed_ms FROM pb_question_metrics').fetchone()[0], 1500)
 
@@ -285,6 +298,8 @@ class StorageTests(unittest.TestCase):
         maintenance.rollback(self.db)
         self.assertFalse(self.db.execute("SELECT 1 FROM sqlite_master WHERE name='pb_assessments'").fetchone())
         pb.initialize(self.db)
+        self.db.execute("UPDATE pb_template_versions SET status=CASE id WHEN 'pb-test-24-v2' THEN 'published' ELSE 'inactive' END")
+        self.db.execute("UPDATE pb_scoring_models SET status=CASE id WHEN 'pb-score-rules-v2' THEN 'published' ELSE 'inactive' END")
         self.db.execute('INSERT INTO pb_sessions VALUES(?,?,?,?)', (self.owner, 'test-csrf', pb.now(), pb.now()+86400))
         self.complete()
         with self.assertRaises(ValueError):
@@ -475,7 +490,7 @@ class HTTPFlowTests(unittest.TestCase):
         status, data = post(action='start')
         self.assertEqual(status, 200)
         identity = data['data']['id']
-        for step, answers in responses().items():
+        for step, answers in responses_v3().items():
             status, _ = post(action='save', id=identity, step=step, revision=step-1, answers=answers, elapsed_ms=1000)
             self.assertEqual(status, 200)
         status, report = post(action='report', id=identity)

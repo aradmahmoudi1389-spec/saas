@@ -6,11 +6,11 @@ import personal_brand as pb
 
 
 def rollback(db):
-    protected = ('pb_assessments', 'pb_consents', 'pb_instagram_connections', 'pb_audit', 'pb_deletion_requests', 'pb_expert_feedback')
+    protected = ('pb_assessments', 'pb_leads', 'pb_consents', 'pb_instagram_connections', 'pb_audit', 'pb_deletion_requests', 'pb_expert_feedback')
     if any(db.execute('SELECT count(*) FROM ' + table).fetchone()[0] for table in protected):
         raise ValueError('بازگشت ساختار با دادهٔ واقعی مجاز نیست؛ کد را بازگردانید و جداول افزایشی را حفظ کنید.')
     db.execute('BEGIN IMMEDIATE')
-    tables = ['pb_question_rules', 'pb_analysis_runs', 'pb_question_metrics', 'pb_question_options', 'pb_questions', 'pb_scores', 'pb_recommendations', 'pb_report_versions', 'pb_reports', 'pb_evidence', 'pb_answers', 'pb_assessments', 'pb_instagram_analysis', 'pb_instagram_media', 'pb_instagram_profiles', 'pb_instagram_sync_jobs', 'pb_instagram_connections', 'pb_oauth_states', 'pb_consents', 'pb_expert_feedback', 'pb_events', 'pb_audit', 'pb_deletion_requests', 'pb_sessions', 'pb_scoring_models', 'pb_template_versions', 'pb_templates', 'pb_privacy_settings', 'pb_request_limits', 'pb_schema_migrations']
+    tables = ['pb_question_feedback', 'pb_answer_drafts', 'pb_leads', 'pb_question_rules', 'pb_analysis_runs', 'pb_question_metrics', 'pb_question_options', 'pb_questions', 'pb_scores', 'pb_recommendations', 'pb_report_versions', 'pb_reports', 'pb_evidence', 'pb_answers', 'pb_assessments', 'pb_instagram_analysis', 'pb_instagram_media', 'pb_instagram_profiles', 'pb_instagram_sync_jobs', 'pb_instagram_connections', 'pb_oauth_states', 'pb_consents', 'pb_expert_feedback', 'pb_events', 'pb_audit', 'pb_deletion_requests', 'pb_sessions', 'pb_scoring_models', 'pb_template_versions', 'pb_templates', 'pb_privacy_settings', 'pb_request_limits', 'pb_schema_migrations']
     for table in tables:
         db.execute('DROP TABLE ' + table)
     db.commit()

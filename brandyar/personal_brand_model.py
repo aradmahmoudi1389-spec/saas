@@ -1,4 +1,5 @@
 import copy
+import json
 import math
 from urllib.parse import urlsplit
 
@@ -200,3 +201,188 @@ def score(answers, body, scoring, instagram=None):
     def action(d, monthly=False):
         return {'dimension': d['key'], 'title': (d['month'] if monthly else d['immediate']) + ' موضوع تمرین شما: «' + context[d['key']][:200] + '».', 'evidence': d['evidence']}
     return {'title': TITLE, 'dimensions': dimensions, 'total': total, 'stage': stage, 'confidence': confidence, 'pattern': 'الگوی احتمالی: ' + patterns[0], 'secondary_patterns': patterns[1:3], 'pattern_reason': f'این پیشنهاد از هدف «{goal}»، وضعیت حرفه‌ای «{status}» و ترکیب نمره‌های شش بُعد استخراج شده است؛ تشخیص شخصیت نیست.', 'strength': ranked[-1]['title'], 'bottleneck': ranked[0]['title'], 'summary': f"در حوزهٔ {answers[1]['expertise']} و برای مخاطب «{answers[1]['audience']}»، قوی‌ترین بُعد خوداظهاری شما {ranked[-1]['title']} است. برای هدف «{goal}»، نخست روی {ranked[0]['title']} کار کنید؛ این گلوگاه فعلی مسیر رشد شماست.", 'central_message': f"در حوزهٔ {answers[1]['expertise']} به {answers[1]['audience']} برای {answers[1]['problem']} کمک می‌کنم.", 'identity': answers[2], 'professional': answers[1], 'content_evidence': answers.get(4, {}) if has_evidence or answers.get(4, {}).get('topics') else None, 'source_weights': scoring['source_weights'], 'score_adjustments': [], 'immediate': [action(d) for d in ranked[:3]], 'thirty_days': [action(d, True) for d in ranked[3:]], 'instagram': instagram, 'limitations': ['این ابزار هنوز اعتبارسنجی روان‌سنجی نشده است.', 'نمره‌ها فقط بر پایهٔ رفتارهای خوداظهارشده‌اند؛ شواهد و پیج به‌صورت زمینهٔ مکمل استفاده می‌شوند و تعدیل امتیاز انجام نشده است.', 'متن شواهد و لینک‌ها اثبات مستقل صحت ادعا نیستند.', 'تحلیل تصویر، ویدیو، شخصیت و ویژگی حساس انجام نشده است.', 'مرحلهٔ بلوغ و الگوی برند فرضیهٔ راهنما هستند، نه حکم قطعی.'], 'analysis_version': scoring['analysis_version']}
+
+
+V3_LIKERT = ['اصلاً دربارهٔ من درست نیست', 'معمولاً دربارهٔ من درست نیست', 'گاهی دربارهٔ من درست است', 'بیشتر وقت‌ها دربارهٔ من درست است', 'کاملاً دربارهٔ من درست است']
+V3_STAGES = ['شروع مسیر', 'در حال شکل‌گرفتن', 'قابل‌تشخیص', 'روبه‌رشد', 'جاافتاده و قابل‌اعتماد']
+V3_DIMENSIONS = [
+    ('clarity', 'روشن‌بودن مسیر', 'اینکه بدانی در چه زمینه‌ای می‌خواهی شناخته شوی.'),
+    ('introduction', 'قابل‌فهم‌بودن معرفی', 'اینکه دیگران سریع بفهمند چه کمکی می‌کنی.'),
+    ('evidence', 'اعتماد و شواهد', 'تجربه‌ها و نتیجه‌هایی که توانایی‌ات را نشان می‌دهند.'),
+    ('content', 'هماهنگی محتوا', 'ارتباط موضوع‌های محتوایت با مسیر و هدفت.'),
+    ('visibility', 'استمرار و دیده‌شدن', 'ادامه‌دادن حضور و کمک‌کردن به مخاطب برای قدم بعدی.'),
+]
+V3_SECTIONS = [
+    {'id':'path','title':'خودت و مسیر فعلی‌ات','description':'قبل از اینکه ببینیم پرسونال برندت چطور است، بهتر است بدانیم الان در چه مسیر کاری هستی و از این ارزیابی چه می‌خواهی. لازم نیست جواب‌هایت رسمی یا کامل باشند؛ همان چیزی را بنویس که همین حالا واقعاً به ذهنت می‌رسد.','purpose':'شناخت نقطهٔ شروع و چیزی که برایت مهم‌تر است.'},
+    {'id':'image','title':'تصویری که می‌خواهی از خودت بسازی','description':'در این قسمت قرار نیست جواب حرفه‌ای یا نهایی بدهی. فقط می‌خواهیم ببینیم دوست داری دیگران چه چیزی را در تو ببینند و چه حسی از آشنایی با تو بگیرند. اگر هنوز جواب روشنی نداری، گزینهٔ نزدیک‌تر را انتخاب کن.','purpose':'روشن‌کردن تصویری که دوست داری در ذهن مخاطب بماند.'},
+    {'id':'behavior','title':'رفتارهای واقعی تو','description':'در این قسمت دربارهٔ رفتارهای واقعی روزمره‌ات سؤال می‌پرسیم. قرار نیست بهترین گزینه را انتخاب کنی. گزینه‌ای را بزن که بیشتر شبیه رفتار این روزهای توست، حتی اگر همیشه این‌طور نیست.','purpose':'دیدن رفتارهای فعلی، بدون قضاوت خوب یا بد.'},
+    {'id':'evidence','title':'شواهد و تجربه','description':'اینجا فقط می‌خواهیم بدانیم چه چیزهایی برای نشان‌دادن توانایی‌هایت در اختیار داری. لازم نیست سابقهٔ خیلی بزرگ یا نمونهٔ رسمی داشته باشی؛ تجربه‌های کوچک هم می‌توانند کمک‌کننده باشند.','purpose':'شناخت چیزهایی که می‌توانند توانایی‌ات را نشان دهند.'},
+    {'id':'online','title':'حضور آنلاین','description':'در این قسمت دربارهٔ حضور آنلاین و شیوه‌ای که دیگران تو را در اینترنت می‌بینند صحبت می‌کنیم. اگر هنوز فعالیت زیادی نداری، همان گزینه‌ای را انتخاب کن که به وضعیت فعلی‌ات نزدیک‌تر است.','purpose':'دیدن تصویری که امروز از تو در فضای آنلاین دیده می‌شود.'},
+]
+V3_BASE = [
+    ('field','این روزها بیشتر در چه زمینه‌ای کار می‌کنی یا دوست داری در چه زمینه‌ای شناخته شوی؟', ['آموزش و تدریس','مشاوره و کوچینگ','فروش و کسب‌وکار','بازاریابی و تولید محتوا','طراحی و کارهای خلاقانه','فناوری و برنامه‌نویسی','پزشکی، سلامت و ورزش','امور مالی و حقوقی','منابع انسانی و مدیریت','هنر و رسانه','دانشجویی و شروع مسیر کاری','هنوز مطمئن نیستم','موضوع دیگری دارم']),
+    ('goal','در حال حاضر بیشتر دنبال کدام نتیجه هستی؟',['پیدا کردن مشتری یا پروژهٔ بیشتر','بهتر دیده‌شدن در حوزهٔ کاری','پیدا کردن شغل یا فرصت کاری بهتر','فروش محصول یا خدمات','معرفی بهتر توانایی‌هایم','ساختن اعتبار در یک موضوع','پیدا کردن همکار یا فرصت همکاری','هنوز دقیق نمی‌دانم؛ فقط می‌خواهم وضعیتم را بهتر بفهمم','هدف دیگری دارم']),
+    ('audience','دوست داری چه کسانی بیشتر تو را بشناسند؟',['مشتریان و خریداران احتمالی','مدیران و کارفرماها','همکاران حوزهٔ کاری','دانشجویان و علاقه‌مندان به یادگیری','صاحبان کسب‌وکار','مخاطبان عمومی','سرمایه‌گذاران یا شرکای تجاری','هنوز دقیق نمی‌دانم','گروه دیگری مدنظرم است']),
+    ('showcase','اگر بخواهی فقط یک چیز را دربارهٔ خودت بیشتر نشان بدهی، کدام مورد برایت مهم‌تر است؟',['دانشی که دارم','تجربه‌ای که به دست آورده‌ام','نتیجه‌ای که برای دیگران ایجاد می‌کنم','سبک و نگاه متفاوت من','شخصیت و طرز فکر من','نمونه‌کارها و کارهایی که انجام داده‌ام','هنوز نمی‌دانم']),
+    ('situation','الان بیشتر کدام حالت را تجربه می‌کنی?',['نمی‌دانم دقیقاً باید خودم را با چه موضوعی معرفی کنم.','چند علاقه و توانایی دارم و انتخاب یک مسیر برایم سخت است.','می‌دانم چه کاری می‌کنم، اما دیگران آن را خوب نمی‌شناسند.','محتوا تولید می‌کنم، اما نمی‌دانم چه چیزی بهتر است منتشر کنم.','شروع می‌کنم، اما استمرار برایم سخت می‌شود.','مخاطب دارم، اما به مشتری یا فرصت کاری تبدیل نمی‌شود.','هنوز نمونه‌کار یا نتیجهٔ کافی برای نشان‌دادن ندارم.','فعلاً مشکل مشخصی احساس نمی‌کنم.','مورد دیگری دارم.']),
+]
+V3_IMAGE = [
+ ('trait','وقتی کسی با تو آشنا می‌شود، دوست داری بیشتر با کدام ویژگی تو را به یاد بیاورد؟',['قابل‌اعتمادبودن','متخصص‌بودن','خلاق‌بودن','ساده و قابل‌فهم توضیح‌دادن','نتیجه‌گرا بودن','همراه و حمایتگر بودن','متفاوت فکرکردن','منظم و حرفه‌ای بودن','هنوز نمی‌دانم','ویژگی دیگری']),
+ ('help','مردم معمولاً برای چه چیزی می‌توانند از تو کمک بگیرند؟',['یادگیری یک مهارت یا موضوع','حل یک مشکل کاری','تصمیم‌گیری و انتخاب بهتر','انجام یک کار تخصصی','پیدا کردن ایده و مسیر','افزایش فروش یا رشد کسب‌وکار','بهترشدن شرایط شخصی یا حرفه‌ای','هنوز کسی برای کمک به سراغم نمی‌آید','مورد دیگری']),
+ ('state','کدام جمله بیشتر به وضعیت فعلی تو نزدیک است?',['هنوز دارم می‌فهمم در چه کاری قوی‌تر هستم.','چند توانایی دارم، اما نمی‌دانم کدام را پررنگ‌تر کنم.','می‌دانم در چه کاری خوبم، اما آن را خوب معرفی نکرده‌ام.','دیگران از توانایی من خبر دارند، اما حضورم منظم نیست.','تا حدی شناخته شده‌ام و می‌خواهم حرفه‌ای‌تر دیده شوم.','نمی‌دانم کدام گزینه به من نزدیک‌تر است.']),
+ ('feeling','دوست داری مخاطب بعد از دیدن محتوا یا کار تو چه احساسی داشته باشد?',['احساس کند چیزی یاد گرفته است.','احساس کند می‌تواند به من اعتماد کند.','برای حل مسئله‌اش انگیزه بگیرد.','ایدهٔ جدید پیدا کند.','احساس کند من او را می‌فهمم.','برای همکاری یا خرید کنجکاو شود.','هنوز نمی‌دانم.']),
+ ('need','برای اینکه دیگران بهتر تو را بشناسند، کدام مورد را بیشتر لازم داری?',['انتخاب یک موضوع روشن','توضیح بهتر دربارهٔ کاری که انجام می‌دهم','نشان‌دادن نمونه‌کار و نتیجه','تولید محتوای منظم‌تر','حضور بیشتر در شبکه‌های اجتماعی','اعتمادبه‌نفس برای معرفی خودم','داشتن یک مسیر مشخص','هنوز مطمئن نیستم']),
+]
+V3_BEHAVIOR = [
+ 'وقتی دربارهٔ کارم صحبت می‌کنم، معمولاً می‌توانم ساده بگویم چه کمکی می‌کنم.','موضوعی که دوست دارم با آن شناخته شوم، برای خودم تا حدی روشن است.','معمولاً می‌دانم چه کسانی بیشتر به تجربه یا توانایی من نیاز دارند.','می‌توانم یک نمونه از کاری را نشان بدهم که برای خودم یا فرد دیگری نتیجه داشته است.','وقتی دربارهٔ توانایی‌هایم حرف می‌زنم، معمولاً مثال یا تجربه‌ای هم برای نشان‌دادن دارم.','محتوایی که منتشر می‌کنم معمولاً به کاری که انجام می‌دهم ارتباط دارد.','کسی که محتوای من را می‌بیند، معمولاً می‌فهمد موضوع اصلی کار من چیست.','در معرفی خودم از جمله‌ها یا ادعاهایی استفاده نمی‌کنم که خودم هم دقیقاً نمی‌دانم منظورشان چیست.','اگر چند محتوای اخیرم را کنار هم بگذارم، موضوع مشترکی بین آن‌ها دیده می‌شود.','وقتی محتوایی منتشر می‌کنم، معمولاً می‌دانم برای چه کسی ساخته شده است.','بیشتر اوقات می‌توانم انتشار محتوا یا معرفی کارم را ادامه بدهم، حتی اگر کامل و بی‌نقص نباشد.','از واکنش‌ها، سؤال‌ها یا نتیجهٔ محتواهایم چیزی یاد می‌گیرم.','چیزی در نگاه، تجربه یا روش کار من وجود دارد که باعث می‌شود با افراد مشابه اشتباه گرفته نشوم.','مخاطب می‌تواند بفهمد برای آشنایی بیشتر، پرسیدن سؤال یا همکاری با من چه کاری انجام دهد.','حضور آنلاین من کم‌وبیش همان تصویری را نشان می‌دهد که دوست دارم دیگران از کارم داشته باشند.'
+]
+V3_EVIDENCE = [('proof','کدام مورد را برای نشان‌دادن توانایی‌هایت داری؟',['نمونه‌کار','تجربهٔ کاری','نتیجه‌ای که برای خودم یا دیگری ایجاد کرده‌ام','رضایت یا نظر دیگران','مدرک یا گواهی','صفحه، محصول یا پروژه','هنوز چیز مشخصی ندارم','مورد دیگری']),('experience','کدام کار یا تجربه‌ات را بیشتر دوست داری دیگران ببینند؟',None),('need','در حال حاضر بیشتر به چه چیزی نیاز داری?',['ساخت نمونه‌کار','نشان‌دادن نتیجهٔ کار','توضیح بهتر توانایی‌ها','منظم‌کردن محتوای قبلی','پیدا کردن موضوع مناسب','گرفتن بازخورد','هنوز نمی‌دانم'])]
+V3_ONLINE = [('platform','در حال حاضر بیشتر در کدام فضا فعالیت می‌کنی?',['اینستاگرام','لینکدین','تلگرام','وب‌سایت شخصی','یوتیوب','چند شبکهٔ اجتماعی','فعلاً حضور فعالی ندارم','جای دیگری']),('published','معمولاً چه چیزی منتشر می‌کنی?',['آموزش','تجربه‌های شخصی و کاری','معرفی خدمات یا محصول','نمونه‌کار','نظر و دیدگاه','محتوای سرگرم‌کننده','محتوای متنوع و بدون موضوع مشخص','فعلاً محتوایی منتشر نمی‌کنم']),('clarity','وقتی کسی صفحهٔ تو را می‌بیند، به‌نظر خودت چقدر می‌فهمد چه کاری انجام می‌دهی?',['اصلاً مشخص نیست','کمی مشخص است','تا حدی مشخص است','بیشتر مشخص است','کاملاً مشخص است','مطمئن نیستم'])]
+
+def template_v3():
+    dims=['clarity','introduction','evidence','content','visibility']
+    mapping=[('introduction',0),('clarity',1),('clarity',2),('evidence',3),('evidence',4),('content',5),('introduction',6),('introduction',7),('content',8),('content',9),('visibility',10),('visibility',11),('clarity',12),('visibility',13),('visibility',14)]
+    return {'schema':3,'title':'ارزیابی پرسونال برند','version':'v3','released_on':'2026-10-27','sections':V3_SECTIONS,'base':V3_BASE,'image':V3_IMAGE,'behavior':[{'id':f'behavior_{i+1}','title':V3_BEHAVIOR[index],'dimension':dim,'order':i,'active':True,'weight':1} for i,(dim,index) in enumerate(mapping)],'evidence':V3_EVIDENCE,'online':V3_ONLINE,'likert':V3_LIKERT,'dimensions':[{'key':k,'title':t,'description':d} for k,t,d in V3_DIMENSIONS],'validation':'not_validated','purpose':'تصویر کلی از وضعیت فعلی، نه قضاوت ارزش یا توانایی.'}
+
+def model_v3():
+    return {'schema':3,'dimensions':{k:1/5 for k,_,_ in V3_DIMENSIONS},'thresholds':[20,40,60,80],'method':'likert-linear-v2','analysis_version':'structured-rules-v3'}
+
+def _v3_clean_choice(data,key,options,required=True,multiple=False):
+    value=data.get(key)
+    if multiple:
+        if not isinstance(value,list) or not 1<=len(value)<= (2 if key == 'audience' else len(options)) or any(not isinstance(v, str) or v not in options for v in value) or len(set(value))!=len(value): raise ValueError('گزینه‌های انتخاب‌شده معتبر نیستند.')
+        if key == 'proof' and 'هنوز چیز مشخصی ندارم' in value and len(value) > 1:
+            raise ValueError('اگر هنوز چیز مشخصی نداری، فقط همان گزینه را انتخاب کن.')
+        return value
+    if value not in options and (required or value): raise ValueError('یکی از گزینه‌ها را انتخاب کنید.')
+    return value or ''
+
+def validate_partial_v3(step, data, body):
+    if body.get('schema') != 3 or not isinstance(data, dict):
+        raise ValueError('قالب پاسخ معتبر نیست.')
+    if step == 3:
+        allowed = {q['id'] for q in body['behavior']}
+        if set(data) - allowed or any(type(v) is not int or not 1 <= v <= 5 for v in data.values()):
+            raise ValueError('پاسخ معتبر نیست.')
+        return dict(data)
+    fields = body[{1: 'base', 2: 'image', 4: 'evidence', 5: 'online'}[step]]
+    options = {key: values for key, _, values in fields}
+    texts = {'field_other', 'goal_other', 'audience_other', 'situation_other'} if step == 1 else {'experience'} if step == 4 else set()
+    if set(data) - set(options) - texts:
+        raise ValueError('فیلد ناشناخته در پاسخ وجود دارد.')
+    result = {}
+    for key, value in data.items():
+        if key in texts:
+            result[key] = clean(value, 1200 if key == 'experience' else 200)
+        elif key in {'audience', 'proof'}:
+            maximum = 2 if key == 'audience' else len(options[key])
+            if not isinstance(value, list) or len(value) > maximum or any(not isinstance(v, str) or v not in options[key] for v in value) or len(set(value)) != len(value):
+                raise ValueError('گزینه‌های انتخاب‌شده معتبر نیستند.')
+            result[key] = value
+        elif value not in options[key]:
+            raise ValueError('یکی از گزینه‌ها را انتخاب کن.')
+        else:
+            result[key] = value
+    return result
+
+
+def validate_step_v3(step,data,body):
+    if not isinstance(data,dict): raise ValueError('قالب پاسخ معتبر نیست.')
+    if step==1:
+        allowed={k for k,_,_ in body['base']}|{'field_other','goal_other','audience_other','situation_other'}
+        if set(data)-allowed: raise ValueError('فیلد ناشناخته در پاسخ وجود دارد.')
+        result={}
+        for key,_,options in body['base']:
+            result[key]=_v3_clean_choice(data,key,options,multiple=key=='audience')
+        for key in ('field_other','goal_other','audience_other','situation_other'):
+            result[key]=clean(data.get(key,''),200)
+        if result['field']=='موضوع دیگری دارم' and not result['field_other']: raise ValueError('موضوع دیگری را کوتاه بنویسید.')
+        return result
+    if step==2:
+        if set(data) - {key for key, _, _ in body['image']}:
+            raise ValueError('فیلد ناشناخته در پاسخ وجود دارد.')
+        result={}
+        for key,_,options in body['image']: result[key]=_v3_clean_choice(data,key,options)
+        return result
+    if step==3:
+        ids={q['id'] for q in body['behavior']}
+        if set(data)!=ids or any(type(v) is not int or not 1<=v<=5 for v in data.values()): raise ValueError('به همهٔ سؤال‌ها پاسخ بده.')
+        return dict(data)
+    if step==4:
+        result={'proof':_v3_clean_choice(data,'proof',body['evidence'][0][2],multiple=True),'experience':clean(data.get('experience',''),1200),'need':_v3_clean_choice(data,'need',body['evidence'][2][2])}
+        if set(data)-{'proof','experience','need'}: raise ValueError('فیلد ناشناخته در پاسخ وجود دارد.')
+        return result
+    if step==5:
+        result={k:_v3_clean_choice(data,k,options) for k,_,options in body['online']}
+        if set(data)-set(result)-{'choice','introduction'}: raise ValueError('فیلد ناشناخته در پاسخ وجود دارد.')
+        result.update(choice=data.get('choice','skip'),introduction=clean(data.get('introduction',''),1200))
+        if result['choice'] not in {'skip','connected'}: raise ValueError('روش ادامه را انتخاب کنید.')
+        return result
+    raise ValueError('مرحله معتبر نیست.')
+
+def score_v3(answers,body,scoring,instagram=None):
+    validate_model(scoring)
+    for step in range(1, 6):
+        validate_step_v3(step, answers[step], body)
+    values=validate_step_v3(3,answers[3],body)
+    dims=[]
+    for key,title,description in V3_DIMENSIONS:
+        items=[q for q in body['behavior'] if q['dimension']==key]
+        score=round(sum((values[q['id']]-1)*25 for q in items)/len(items),2)
+        dims.append({'key':key,'title':title,'description':description,'score':score,'evidence':[q['id'] for q in items],'interpretation':'جای خوبی برای شروع' if score<40 else 'در حال شکل‌گرفتن' if score<70 else 'نقطهٔ قوت فعلی'})
+    total=round(sum(d['score']*scoring['dimensions'][d['key']] for d in dims),2)
+    stage=V3_STAGES[min(sum(total>=t for t in scoring['thresholds']),4)]
+    ranked=sorted(dims,key=lambda d:d['score'])
+    answers1=answers[1]; field=answers1['field_other'] if answers1['field']=='موضوع دیگری دارم' else answers1['field']
+    summaries = ['اینجا جای خوبی برای شروع وجود دارد؛ هنوز می‌توانی موضوع و شیوهٔ معرفی خودت را روشن‌تر کنی.', 'بخش‌هایی از مسیرت روشن شده، اما هنوز مخاطب ممکن است نداند دقیقاً برای چه کاری به سراغت بیاید.', 'تصویر کلی کارت قابل‌تشخیص است و حالا می‌توانی بخش‌های کم‌رنگ‌تر را روشن‌تر کنی.', 'چند رفتار کمک‌کننده در حضورت دیده می‌شود؛ تقویت بخش‌های کم‌رنگ‌تر می‌تواند به ادامهٔ رشد کمک کند.', 'پاسخ‌هایت نشان می‌دهد موضوع کارت، شواهد و حضورت تا حد زیادی در کنار هم قرار گرفته‌اند.']
+    summary = summaries[min(sum(total>=t for t in scoring['thresholds']),4)]
+    actions = {
+        'clarity': 'فعلاً یک موضوع اصلی انتخاب کن و معرفی‌ات را حول همان موضوع بنویس.',
+        'introduction': 'در یک جملهٔ ساده بگو چه کمکی به چه کسی می‌کنی و آن را به یک نفر نشان بده.',
+        'evidence': 'یک تجربهٔ کوچک را انتخاب کن و نتیجهٔ قابل‌نشان‌دادن آن را کوتاه توضیح بده.',
+        'content': 'چند محتوای اخیرت را کنار هم بگذار و موضوع مشترک آن‌ها را پیدا کن.',
+        'visibility': 'یک شکل ساده و قابل‌ادامه برای معرفی کارت انتخاب کن، حتی اگر بی‌نقص نیست.'
+    }
+    opportunity=ranked[0]['title']
+    starter = actions[ranked[0]['key']]
+    reason = f'در پاسخ‌های رفتاری تو، میانگین بخش «{opportunity}» {ranked[0]["score"]} از ۱۰۰ و بخش «{ranked[-1]["title"]}» {ranked[-1]["score"]} از ۱۰۰ بود. انتخاب‌های دیگر برای شناخت هدفت استفاده شده‌اند، نه کم‌کردن یا زیادکردن نمره.'
+    return {'title':'ارزیابی پرسونال برند','dimensions':dims,'total':total,'stage':stage,'confidence':'تصویر کلی بر اساس پاسخ‌های تو','summary':summary,'points':[f'قوی‌ترین بخش فعلی: {ranked[-1]["title"]}.',f'بیشترین فرصت رشد: {opportunity}.','این نتیجه فقط وضعیت فعلی را نشان می‌دهد و قابل تغییر است.'],'strength':ranked[-1]['title'],'bottleneck':opportunity,'top_opportunity':opportunity,'starter_action':starter,'reason':reason,'preview_opportunities':[d['title'] for d in ranked[:2]],'goal':answers1['goal'],'challenge_question':'اگر مخاطب فقط یک چیز را از تو به خاطر بسپارد، دوست داری چه باشد؟','instagram':instagram,'limitations':['این نتیجه یک تصویر کلی از وضعیت فعلی توست و قرار نیست ارزش یا توانایی‌ات را قضاوت کند.'],'immediate':[{'dimension':ranked[0]['key'],'title':starter,'evidence':ranked[0]['evidence']}],'thirty_days':[],'analysis_version':scoring['analysis_version']}
+
+_legacy_validate_step=validate_step
+_legacy_validate_template=validate_template
+_legacy_validate_model=validate_model
+_legacy_score=score
+
+def validate_step(step,data,body): return validate_step_v3(step,data,body) if body.get('schema')==3 else _legacy_validate_step(step,data,body)
+def validate_template(body):
+    if body.get('schema')==3:
+        original=template_v3()
+        if set(body)!=set(original) or len(body.get('behavior',[]))!=15 or len(body.get('sections',[]))!=5:
+            raise ValueError('قالب نسخهٔ جدید باید پنج بخش و ۱۵ سؤال داشته باشد.')
+        for key in set(original) - {'title', 'behavior'}:
+            if json.dumps(body[key], ensure_ascii=False, sort_keys=True) != json.dumps(original[key], ensure_ascii=False, sort_keys=True):
+                raise ValueError('ساختار بخش‌ها و گزینه‌ها در این نسخه ثابت است.')
+        clean(body['title'], 150, True)
+        sources={q['id']:q for q in original['behavior']}
+        ids=set(sources)
+        for q in body['behavior']:
+            if set(q)!=set(original['behavior'][0]) or q['id'] not in ids or q['dimension'] != sources[q['id']]['dimension'] or q['active'] is not True or q['weight'] != 1 or type(q['order']) is not int or not 0<=q['order']<15:
+                raise ValueError('ساختار سؤال‌های نسخهٔ جدید معتبر نیست.')
+            clean(q['title'],400,True)
+        if len({q['id'] for q in body['behavior']})!=15 or len({q['order'] for q in body['behavior']})!=15: raise ValueError('ترتیب سؤال‌ها باید یکتا باشد.')
+        return
+    return _legacy_validate_template(body)
+def validate_model(body):
+    if body.get('schema')==3:
+        expected = model_v3()
+        if set(body) != set(expected) or not isinstance(body['dimensions'], dict) or set(body['dimensions']) != set(expected['dimensions']) or any(body[key] != expected[key] for key in ('schema', 'thresholds', 'method', 'analysis_version')):
+            raise ValueError('مدل نمره‌دهی نسخهٔ جدید معتبر نیست.')
+        weights = list(body['dimensions'].values())
+        if any(type(v) not in (int, float) or not math.isfinite(v) or v <= 0 for v in weights) or not math.isclose(sum(weights), 1, abs_tol=1e-6):
+            raise ValueError('وزن‌های ابعاد باید مثبت و جمع آن‌ها یک باشد.')
+        return
+    return _legacy_validate_model(body)
+def score(answers, body, scoring, instagram=None):
+    if (body.get('schema') == 3) != (scoring.get('schema') == 3):
+        raise ValueError('نسخهٔ مدل باید با نسخهٔ ارزیابی هماهنگ باشد.')
+    return score_v3(answers, body, scoring, instagram) if body.get('schema') == 3 else _legacy_score(answers, body, scoring, instagram)
