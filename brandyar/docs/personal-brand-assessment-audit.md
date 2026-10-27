@@ -1,5 +1,7 @@
 # ممیزی ارزیابی پرسونال برند
 
+> این سند ممیزی و تحویل اولیهٔ `0ccb400` را ثبت می‌کند. وضعیت جاری انتشار `49fcb80`، جایگزینی ورودی اصلی و ۲۴ گویه در [گزارش تحویل](personal-brand-assessment-release.md) ثبت شده است؛ توصیف ۱۸ گویه و مسیر فرعی در بخش‌های زیر مربوط به نسخهٔ قبلی است.
+
 ## وضعیت پیش از تغییر
 
 پروژه HTML/CSS/JavaScript استاتیک و Python ThreadingHTTPServer است. `server.py` مالک route، cookie، SQLite و اتصال سروری Supabase است. `brand_analysis.py` فقط پاسخ‌های انتخابی نسخهٔ ثابت `assessment_questions.json` را برای تولید گزارش با schema قدیمی می‌فرستد. گزارش قدیمی در Supabase assessments و تاریخچهٔ مدیریتی در SQLite نگهداری می‌شود. مسیرهای قدیمی `/api/assessment/*` و hash-routeهای عمومی حفظ می‌شوند.
