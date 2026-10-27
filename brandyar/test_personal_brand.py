@@ -20,7 +20,7 @@ import server
 def responses(value=3):
     body = model.template()
     return {
-        1: {**{k: 'متن آزمایشی' if required else '' for k, _, required in body['base']}, 'goal': body['goals'][0]},
+        1: {**{k: 'متن آزمایشی' if required else '' for k, _, required in body['base']}, 'professional_status': body['statuses'][0], 'barrier': [body['barriers'][0]], 'goal': body['goals'][0]},
         2: {k: 'پاسخ آزمایشی' if required else '' for k, _, required in body['identity']},
         3: {q['id']: value for q in body['items']},
         4: {},
@@ -28,7 +28,74 @@ def responses(value=3):
     }
 
 
+class MigrationTests(unittest.TestCase):
+    def test_upgrade_preserves_published_questions_answers_and_reports(self):
+        db = sqlite3.connect(':memory:')
+        self.addCleanup(db.close)
+        db.row_factory = sqlite3.Row
+        db.execute('PRAGMA foreign_keys=ON')
+        db.execute('CREATE TABLE staff(id INTEGER PRIMARY KEY)')
+        db.executescript(Path(pb.__file__).with_name('personal_brand_migration_001.sql').read_text())
+        legacy = copy.deepcopy(model.template())
+        legacy.pop('statuses')
+        legacy.pop('barriers')
+        legacy['items'] = [{k: q[k] for k in ('id', 'dimension', 'title')} for q in legacy['items'] if not q['id'].endswith('_4')]
+        old_body = pb.dumps(legacy)
+        db.execute('INSERT INTO pb_templates VALUES(?,?,?)', ('personal-brand', model.TITLE, 1))
+        db.execute('INSERT INTO pb_template_versions VALUES(?,?,?,?,?,?,NULL)', ('pb-test-1', 'personal-brand', 1, 'published', old_body, 1))
+        for i, q in enumerate(legacy['items']):
+            db.execute('INSERT INTO pb_questions VALUES(?,?,?,?,?)', (q['id'], 'pb-test-1', q['dimension'], q['title'], i))
+        db.execute('INSERT INTO pb_scoring_models VALUES(?,?,?,?,?,NULL)', ('pb-score-1', 1, 'published', pb.dumps({**model.model(), 'analysis_version': 'structured-rules-v1'}), 1))
+        db.execute('INSERT INTO pb_sessions VALUES(?,?,?,?)', ('owner', 'csrf', 1, pb.now()+100))
+        db.execute('INSERT INTO pb_assessments VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', ('assessment', 'owner', 'pb-test-1', 'pb-score-1', pb.dumps([q['id'] for q in legacy['items']]), 'completed', 5, 5, 1, 2, 2, None))
+        db.execute('INSERT INTO pb_answers VALUES(?,?,?,?,?,?,?)', ('assessment', 3, '{"identity_1":4}', '{"identity_1":4}', 10, 1, 2))
+        db.execute('INSERT INTO pb_reports VALUES(?,?,?)', ('report', 'assessment', 2))
+        old_report = '{"legacy":"immutable result"}'
+        db.execute('INSERT INTO pb_report_versions VALUES(?,?,?,?,?,?,?,?)', ('result', 'report', 1, 'pb-score-1', old_report, '{}', 'original', 2))
+        db.commit()
+        pb.initialize(db)
+        pb.initialize(db)
+        self.assertEqual(db.execute("SELECT body FROM pb_template_versions WHERE id='pb-test-1'").fetchone()[0], old_body)
+        self.assertEqual(db.execute("SELECT body FROM pb_report_versions WHERE id='result'").fetchone()[0], old_report)
+        self.assertEqual(db.execute("SELECT raw_json FROM pb_answers WHERE assessment_id='assessment'").fetchone()[0], '{"identity_1":4}')
+        self.assertEqual(db.execute("SELECT count(*) FROM pb_questions WHERE template_version='pb-test-1'").fetchone()[0], 18)
+        self.assertEqual(db.execute("SELECT count(*) FROM pb_questions WHERE template_version='pb-test-24-v2'").fetchone()[0], 24)
+        new_id = pb.mutate(db, 'owner', {'action':'start'})['id']
+        self.assertEqual(pb.owned(db, new_id, 'owner')['template_version'], 'pb-test-24-v2')
+        self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(), [])
+
+
 class ModelTests(unittest.TestCase):
+    def test_requested_questionnaire_contract(self):
+        body = model.template()
+        self.assertEqual(len(body['items']), 24)
+        for key, *_ in model.DIMENSIONS:
+            self.assertEqual(sum(q['dimension'] == key for q in body['items']), 4)
+        self.assertEqual(len(body['statuses']), 8)
+        self.assertEqual(len(body['barriers']), 10)
+        self.assertEqual(len(body['identity']), 6)
+        self.assertFalse(any('بیو' in f[1] for f in body['base'] + body['identity']))
+        self.assertEqual(body['items'][0]['title'], 'می‌توانم تخصص و نقش حرفه‌ای خود را در یک توضیح کوتاه و روشن بیان کنم.')
+        self.assertEqual(body['items'][-1]['title'], 'برای رشد دیده‌شدن، اعتبار و ارتباطات حرفه‌ای خود برنامه دارم.')
+        for barriers in [[], model.BARRIERS[:3], [model.BARRIERS[0]] * 2, ['unknown'], 'text']:
+            with self.subTest(barriers=barriers), self.assertRaises(ValueError):
+                model.validate_step(1, {**responses()[1], 'barrier': barriers}, body)
+        self.assertEqual(model.validate_step(1, responses()[1], body)['barrier'], model.BARRIERS[:1])
+
+    def test_versioned_order_and_activation(self):
+        body = model.template()
+        body['items'][0]['active'] = False
+        body['items'][0]['order'], body['items'][1]['order'] = 1, 0
+        model.validate_template(body)
+        answer = responses()[3]
+        del answer['identity_1']
+        model.validate_step(3, answer, body)
+        result = model.score({**responses(), 3: answer}, body, model.model())
+        self.assertEqual(len(result['dimensions'][0]['evidence']), 3)
+        body['items'][1]['order'] = 1
+        with self.assertRaises(ValueError):
+            model.validate_template(body)
+
     def test_score_extremes_and_stages(self):
         for value, total, stage in [(1, 0, 'کشف'), (2, 25, 'تعریف'), (3, 50, 'تثبیت'), (4, 75, 'تمایز'), (5, 100, 'مرجعیت')]:
             with self.subTest(value=value):
@@ -37,7 +104,7 @@ class ModelTests(unittest.TestCase):
                 self.assertEqual(report['stage'], stage)
                 self.assertEqual(len(report['dimensions']), 6)
                 self.assertEqual(len(report['immediate']), 3)
-                self.assertEqual(report['confidence'], 'خوداظهاری')
+                self.assertEqual(report['confidence'], 'تحلیل پایه بر اساس پاسخ‌های شما')
 
     def test_weights_and_evidence_do_not_inflate_scores(self):
         answers = responses(1)
@@ -52,7 +119,7 @@ class ModelTests(unittest.TestCase):
         answers[4]['proof'] = 'شرح نمونه‌کار؛ نه تأیید مستقل'
         enriched = model.score(answers, model.template(), scoring)
         self.assertEqual(enriched['total'], 50)
-        self.assertEqual(enriched['confidence'], 'خوداظهاری به‌همراه شواهد')
+        self.assertEqual(enriched['confidence'], 'تحلیل تکمیل‌شده با شواهدی که وارد کرده‌اید')
 
     def test_invalid_answers(self):
         for answers in [{}, {'unknown': 3}, {**responses()[3], 'identity_1': True}, {**responses()[3], 'identity_1': 6}]:
@@ -103,9 +170,28 @@ class StorageTests(unittest.TestCase):
         self.db.commit()
         return identity, result
 
+    def test_edit_resume_and_distinct_real_results(self):
+        identity, first = self.complete(responses(1))
+        self.assertEqual(first['total'], 0)
+        pb.mutate(self.db, self.owner, {'action':'edit', 'id':identity})
+        resumed = pb.assessment_data(self.db, pb.owned(self.db, identity, self.owner))
+        self.assertEqual(resumed['assessment']['stage'], 0)
+        self.assertEqual(resumed['answers']['3'], responses(1)[3])
+        revision = resumed['assessment']['revision']
+        pb.mutate(self.db, self.owner, {'action':'save', 'id':identity, 'step':3, 'revision':revision, 'answers':responses(5)[3]})
+        second = pb.mutate(self.db, self.owner, {'action':'report', 'id':identity})['report']
+        self.assertEqual(second['total'], 100)
+        versions = pb.assessment_data(self.db, pb.owned(self.db, identity, self.owner))['reports']
+        self.assertEqual(versions[1]['body'], first)
+        self.assertEqual(len(versions), 2)
+        self.assertEqual(self.db.execute("SELECT count(*) FROM pb_analysis_runs WHERE status='success'").fetchone()[0], 2)
+        other_id, other = self.complete(responses(2))
+        self.assertNotEqual(other['total'], second['total'])
+        self.assertNotEqual(other_id, identity)
+
     def test_idempotent_migration_and_report(self):
         pb.initialize(self.db)
-        self.assertEqual(self.db.execute('SELECT count(*) FROM pb_questions').fetchone()[0], 18)
+        self.assertEqual(self.db.execute('SELECT count(*) FROM pb_questions').fetchone()[0], 24)
         identity, report = self.complete()
         again = pb.mutate(self.db, self.owner, {'action': 'report', 'id': identity})['report']
         self.assertEqual(again, report)
@@ -127,7 +213,7 @@ class StorageTests(unittest.TestCase):
         body['dimensions'] = {key: .1 for key in body['dimensions']}
         body['dimensions']['identity'] = .5
         pb.admin_mutate(self.db, self.staff, {'action': 'model_draft', 'body': body, 'confirmed': True, 'reason': 'آزمایش وزن تازه'})
-        selected = self.db.execute('SELECT id FROM pb_scoring_models WHERE version=2').fetchone()[0]
+        selected = self.db.execute('SELECT id FROM pb_scoring_models WHERE version=3').fetchone()[0]
         pb.admin_mutate(self.db, self.staff, {'action': 'model_publish', 'id': selected, 'confirmed': True, 'reason': 'انتشار آزمایشی'})
         pb.admin_mutate(self.db, self.staff, {'action': 'regenerate', 'id': identity, 'scoring_version': selected, 'confirmed': True, 'reason': 'مقایسهٔ مدل‌ها'})
         data = pb.assessment_data(self.db, pb.owned(self.db, identity, self.owner))
@@ -137,7 +223,7 @@ class StorageTests(unittest.TestCase):
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("UPDATE pb_report_versions SET body='{}'")
         with self.assertRaises(sqlite3.IntegrityError):
-            self.db.execute("UPDATE pb_template_versions SET body='{}' WHERE id='pb-test-1'")
+            self.db.execute("UPDATE pb_template_versions SET body='{}' WHERE id='pb-test-24-v2'")
 
     def test_admin_permissions_and_audit(self):
         identity, _ = self.complete()
@@ -178,7 +264,7 @@ class StorageTests(unittest.TestCase):
 
     def test_filters_export_and_question_times(self):
         identity, _ = self.complete()
-        data = pb.admin_read(self.db, self.staff, {'state': ['completed'], 'maturity': ['تثبیت'], 'confidence': ['خوداظهاری'], 'connected': ['no']})
+        data = pb.admin_read(self.db, self.staff, {'state': ['completed'], 'maturity': ['تثبیت'], 'confidence': ['تحلیل پایه بر اساس پاسخ‌های شما'], 'connected': ['no']})
         self.assertEqual(data['total'], 1)
         self.assertEqual(pb.admin_read(self.db, self.staff, {'maturity': ['مرجعیت']})['total'], 0)
         exported = pb.admin_read(self.db, self.staff, {'action': ['validation_export']})

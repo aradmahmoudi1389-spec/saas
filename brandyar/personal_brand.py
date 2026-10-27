@@ -29,15 +29,23 @@ def dumps(value):
 
 
 def initialize(db):
-    if db.execute("SELECT 1 FROM sqlite_master WHERE name='pb_schema_migrations'").fetchone():
+    exists = db.execute("SELECT 1 FROM sqlite_master WHERE name='pb_schema_migrations'").fetchone()
+    if exists and db.execute('SELECT 1 FROM pb_schema_migrations WHERE version=2').fetchone():
         return
     try:
-        db.executescript('BEGIN IMMEDIATE;\n' + Path(__file__).with_name('personal_brand_migration_001.sql').read_text())
-        db.execute('INSERT INTO pb_templates VALUES(?,?,?)', ('personal-brand', model.TITLE, now()))
+        if not exists:
+            db.executescript('BEGIN IMMEDIATE;\n' + Path(__file__).with_name('personal_brand_migration_001.sql').read_text())
+            db.execute('INSERT INTO pb_templates VALUES(?,?,?)', ('personal-brand', model.TITLE, now()))
+            db.commit()
+        db.executescript('BEGIN IMMEDIATE;\n' + Path(__file__).with_name('personal_brand_migration_002.sql').read_text())
+        version = max(2, db.execute('SELECT coalesce(max(version),0)+1 FROM pb_template_versions').fetchone()[0])
+        db.execute("UPDATE pb_template_versions SET status='inactive' WHERE status='published'")
         body = model.template()
-        db.execute('INSERT INTO pb_template_versions VALUES(?,?,?,?,?,?,NULL)', ('pb-test-1', 'personal-brand', 1, 'published', dumps(body), now()))
-        save_questions(db, 'pb-test-1', body)
-        db.execute('INSERT INTO pb_scoring_models VALUES(?,?,?,?,?,NULL)', ('pb-score-1', 1, 'published', dumps(model.model()), now()))
+        db.execute('INSERT INTO pb_template_versions VALUES(?,?,?,?,?,?,NULL)', ('pb-test-24-v2', 'personal-brand', version, 'published', dumps(body), now()))
+        save_questions(db, 'pb-test-24-v2', body)
+        scoring_version = max(2, db.execute('SELECT coalesce(max(version),0)+1 FROM pb_scoring_models').fetchone()[0])
+        db.execute("UPDATE pb_scoring_models SET status='inactive' WHERE status='published'")
+        db.execute('INSERT INTO pb_scoring_models VALUES(?,?,?,?,?,NULL)', ('pb-score-rules-v2', scoring_version, 'published', dumps(model.model()), now()))
         db.commit()
     except Exception:
         db.rollback()
@@ -46,7 +54,7 @@ def initialize(db):
 
 def save_questions(db, version, body):
     for i, q in enumerate(body['items']):
-        db.execute('INSERT INTO pb_questions VALUES(?,?,?,?,?)', (q['id'], version, q['dimension'], q['title'], i))
+        db.execute('INSERT INTO pb_questions(id,template_version,dimension,title,position,weight,active) VALUES(?,?,?,?,?,?,?)', (q['id'], version, q['dimension'], q['title'], q.get('order', i), q.get('weight', 1), int(q.get('active', True))))
         db.executemany('INSERT INTO pb_question_options VALUES(?,?,?,?)', [(q['id'], version, n + 1, title) for n, title in enumerate(body['likert'])])
 
 
@@ -126,6 +134,10 @@ def create_report(db, row, reason, scoring_version=None):
         raise ValueError('همگام‌سازی معتبر موجود نیست؛ دوباره همگام‌سازی یا ادامه بدون اتصال را انتخاب کنید.')
     if answers[5]['choice'] == 'skip':
         connection = None
+    for step, answer in answers.items():
+        model.validate_step(step, answer, template)
+    run_id = uid()
+    db.execute('INSERT INTO pb_analysis_runs VALUES(?,?,?,?,?,?,?)', (run_id, row['id'], scoring['analysis_version'], 'running', None, now(), None))
     report = model.score(answers, template, scoring, connection)
     parent = db.execute('SELECT id FROM pb_reports WHERE assessment_id=?', (row['id'],)).fetchone()
     parent_id = parent['id'] if parent else uid()
@@ -142,6 +154,8 @@ def create_report(db, row, reason, scoring_version=None):
         db.execute('INSERT INTO pb_recommendations VALUES(?,?,?,?,?)', (uid(), identity, recommendation['dimension'], dumps(recommendation), now()))
     db.execute("UPDATE pb_assessments SET state='completed',completed_at=?,updated_at=? WHERE id=?", (now(), now(), row['id']))
     event(db, row['owner_hash'], row, 'report_ready', 'report-ready:' + identity)
+    db.execute("UPDATE pb_analysis_runs SET status='success',completed_at=? WHERE id=?", (now(), run_id))
+    event(db, row['owner_hash'], row, 'assessment_completed', 'completed:' + identity)
     audit(db, row['owner_hash'], 'report_generated', row['id'], {'version': version})
     return report
 
@@ -181,8 +195,7 @@ def mutate(db, owner, data):
         body = json.loads(version['body'])
         order = []
         for dimension in model.DIMENSIONS:
-            group = [q['id'] for q in body['items'] if q['dimension'] == dimension[0]]
-            secrets.SystemRandom().shuffle(group)
+            group = [q['id'] for q in sorted(model.active_items(body), key=lambda q: q.get('order', 0)) if q['dimension'] == dimension[0]]
             order.extend(group)
         identity = uid()
         db.execute('INSERT INTO pb_assessments VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', (identity, owner, version['id'], scoring['id'], dumps(order), 'draft', 0, 0, now(), now(), None, None))
@@ -205,6 +218,10 @@ def mutate(db, owner, data):
         audit(db, owner, 'instagram_disconnected')
         return {'ok': True}
     row = owned(db, data.get('id'), owner)
+    if action == 'edit':
+        db.execute("UPDATE pb_assessments SET state='draft',stage=0,revision=revision+1,updated_at=? WHERE id=?", (now(), row['id']))
+        audit(db, owner, 'assessment_edit_started', row['id'])
+        return {'ok': True}
     if action == 'save':
         if row['state'] != 'draft' or data.get('revision') != row['revision']:
             raise ValueError('نسخهٔ فرم تغییر کرده یا تکمیل شده است؛ اطلاعات را دوباره دریافت کنید.')
@@ -268,7 +285,9 @@ def admin_read(db, staff, query):
     if query.get('action', [''])[0] == 'validation_export':
         if not admin_workspace.allowed(staff['role'], 'export'):
             raise PermissionError('اجازهٔ خروجی گرفتن ندارید.')
-        version = query.get('template_version', ['pb-test-1'])[0]
+        version = query.get('template_version', [None])[0]
+        if not version:
+            version = db.execute("SELECT id FROM pb_template_versions WHERE status='published' ORDER BY version DESC LIMIT 1").fetchone()[0]
         rows = [json.loads(r[0]) for r in db.execute('SELECT a.normalized_json FROM pb_answers a JOIN pb_assessments s ON s.id=a.assessment_id WHERE a.step=3 AND s.template_version=? ORDER BY s.id LIMIT 5000', (version,))]
         audit(db, 'staff:' + str(staff['staff_id']), 'anonymous_validation_export', version, {'rows': len(rows)})
         return {'template_version': version, 'responses': rows, 'excluded': ['شناسه، زمان، متن آزاد، لینک، دادهٔ پیج و اطلاعات نشست']}
@@ -280,7 +299,12 @@ def admin_read(db, staff, query):
         if not row:
             raise LookupError('ارزیابی پیدا نشد.')
         audit(db, 'staff:' + str(staff['staff_id']), 'view_assessment', identity)
-        return assessment_data(db, row)
+        detail = assessment_data(db, row)
+        detail['analysis_runs'] = [dict(r) for r in db.execute('SELECT id,engine_version,status,error_code,created_at,completed_at FROM pb_analysis_runs WHERE assessment_id=? ORDER BY created_at DESC', (identity,))]
+        detail['connection'] = public_connection(latest_connection(db, row['owner_hash']))
+        detail['instagram'] = instagram_context(db, row['owner_hash'])
+        detail['audit'] = [dict(r) for r in db.execute('SELECT action,created_at FROM pb_audit WHERE entity_id=? ORDER BY created_at DESC LIMIT 100', (identity,))]
+        return detail
     filters, params = [], []
     for key, expression in {'state': 's.state', 'maturity': "json_extract(v.body,'$.stage')", 'confidence': "json_extract(v.body,'$.confidence')"}.items():
         value = query.get(key, [''])[0]
@@ -300,7 +324,7 @@ def admin_read(db, staff, query):
     sql = " FROM pb_assessments s LEFT JOIN pb_reports r ON r.assessment_id=s.id LEFT JOIN pb_report_versions v ON v.id=(SELECT id FROM pb_report_versions WHERE report_id=r.id ORDER BY version DESC LIMIT 1)"
     where = ' WHERE ' + ' AND '.join(filters) if filters else ''
     total = db.execute('SELECT count(*)' + sql + where, params).fetchone()[0]
-    rows = [dict(r) for r in db.execute("SELECT s.id,s.state,s.stage,s.template_version,s.scoring_version,s.created_at,s.completed_at,s.archived_at,json_extract(v.body,'$.stage') AS maturity,json_extract(v.body,'$.confidence') AS confidence" + sql + where + ' ORDER BY s.created_at DESC,s.id LIMIT 100 OFFSET ?', [*params, offset])]
+    rows = [dict(r) for r in db.execute("SELECT s.id,s.state,s.stage,s.template_version,s.scoring_version,s.created_at,s.completed_at,s.archived_at,(SELECT status FROM pb_analysis_runs WHERE assessment_id=s.id ORDER BY created_at DESC,rowid DESC LIMIT 1) AS analysis_status,(SELECT status FROM pb_instagram_connections WHERE owner_hash=s.owner_hash ORDER BY granted_at DESC,rowid DESC LIMIT 1) AS instagram_status,json_extract(v.body,'$.stage') AS maturity,json_extract(v.body,'$.confidence') AS confidence" + sql + where + ' ORDER BY s.created_at DESC,s.id LIMIT 100 OFFSET ?', [*params, offset])]
     templates = [dict(r) for r in db.execute('SELECT * FROM pb_template_versions ORDER BY version DESC')]
     models = [dict(r) for r in db.execute('SELECT * FROM pb_scoring_models ORDER BY version DESC')]
     for r in templates + models:
@@ -466,6 +490,7 @@ def dispatch(handler, connect, admin=False, write=False):
                 with connect() as failed_db:
                     row = owned(failed_db, data.get('id'), owner)
                     event(failed_db, owner, row, 'report_failed', trace, status='failed')
+                    failed_db.execute('INSERT INTO pb_analysis_runs VALUES(?,?,?,?,?,?,?)', (trace, row['id'], 'structured-rules-v2', 'failed', 'invalid_or_incomplete_answers', now(), now()))
                     failed_db.commit()
             except (sqlite3.Error, LookupError):
                 pass

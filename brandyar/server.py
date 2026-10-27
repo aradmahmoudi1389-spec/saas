@@ -138,7 +138,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store')
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Referrer-Policy', 'no-referrer')
-        policy = "default-src 'none'; style-src 'self'; font-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+        policy = "default-src 'none'; style-src 'self'; font-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
         if self.path in ('/', '/index.html'):
             policy = "default-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
         self.send_header('Content-Security-Policy', policy)
@@ -627,6 +627,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlsplit(self.path).path
+        if path in {'/assessment', '/assessment/'}:
+            return self.respond(303, content_type='text/html; charset=utf-8', headers={'Location': '/personal-brand'})
         if path == '/api/personal-brand/instagram/callback':
             import personal_brand_instagram
             return personal_brand_instagram.callback(self, connect)
