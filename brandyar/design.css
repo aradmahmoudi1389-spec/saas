@@ -1,0 +1,352 @@
+@font-face{font-family:NesharoUI;src:url('/fonts/Vazirmatn-Regular.woff2') format('woff2');font-display:swap}
+:root{
+  --ui-bg:#f5f2eb;--ui-paper:#fffdf8;--ui-ink:#252e29;--ui-muted:#636a61;
+  --ui-line:#d8d8cd;--ui-green:#245444;--ui-green-hover:#183e32;
+  --ui-soft:#e8ece2;--ui-copper:#95512e;--ui-copper-soft:#f1e5d8;--ui-on-green:#fffdf8;
+  --color-bg:var(--ui-bg);--color-surface:var(--ui-paper);--color-surface-raised:var(--ui-paper);
+  --color-text:var(--ui-ink);--color-text-muted:var(--ui-muted);--color-border:var(--ui-line);
+  --color-primary:var(--ui-green);--color-primary-hover:var(--ui-green-hover);--color-primary-soft:var(--ui-soft);
+  --color-accent:var(--ui-copper);--color-accent-soft:var(--ui-copper-soft);--color-focus:var(--ui-copper);
+}
+:root[data-theme=dark]{
+  --ui-bg:#171e1b;--ui-paper:#202923;--ui-ink:#f1f0e7;--ui-muted:#bac3b8;
+  --ui-line:#465247;--ui-green:#b7d3b9;--ui-green-hover:#d4e6d3;
+  --ui-soft:#2c3b30;--ui-copper:#e6b38b;--ui-copper-soft:#3d3025;--ui-on-green:#17271d;
+}
+html body:is(.nesharo-site,.assessment-mode,.workspace-mode,.account-mode,.admin-mode){
+  background:var(--ui-bg);color:var(--ui-ink);font-family:var(--font-main,NesharoUI),Tahoma,sans-serif;
+  font-size:16px;line-height:1.95;
+}
+body:is(.nesharo-site,.assessment-mode,.workspace-mode,.account-mode,.admin-mode) :is(h1,h2,h3){text-wrap:balance;letter-spacing:-.035em}
+body:is(.nesharo-site,.assessment-mode,.workspace-mode,.account-mode,.admin-mode) :is(p,li,dd){overflow-wrap:anywhere}
+body:is(.nesharo-site,.assessment-mode,.workspace-mode,.account-mode,.admin-mode) :is(button,input,textarea,select){font:inherit}
+body:is(.nesharo-site,.assessment-mode,.workspace-mode,.account-mode,.admin-mode) :focus-visible{outline:3px solid var(--ui-copper);outline-offset:4px}
+body:is(.nesharo-site,.assessment-mode,.workspace-mode,.account-mode,.admin-mode) :is(button,input:not([type=checkbox]):not([type=radio]),select){min-height:44px}
+body:is(.nesharo-site,.assessment-mode) .container{width:min(1240px,calc(100% - 64px));max-width:1240px;padding-inline:0}
+html body:is(.nesharo-site,.assessment-mode) .site-header{position:sticky;top:0;background:var(--ui-bg);border-bottom:1px solid var(--ui-line);box-shadow:none;backdrop-filter:none;color:var(--ui-ink)}
+body:is(.nesharo-site,.assessment-mode) .header-inner{height:auto;min-height:88px;gap:24px}
+body:is(.nesharo-site,.assessment-mode) .logo{color:var(--ui-ink);font-size:26px;gap:8px}
+body:is(.nesharo-site,.assessment-mode) .logo-icon{width:38px;height:38px;border-radius:50%;border-color:var(--ui-line)}
+body:is(.nesharo-site,.assessment-mode) .logo-dot{color:var(--ui-copper)}
+body:is(.nesharo-site,.assessment-mode) .site-nav{gap:20px}
+body:is(.nesharo-site,.assessment-mode) .site-nav>a:not(.btn){font-size:13px;color:var(--ui-muted);padding-block:12px}
+body:is(.nesharo-site,.assessment-mode) .site-nav>a.active{color:var(--ui-green);text-decoration:underline;text-underline-offset:9px}
+body:is(.nesharo-site,.assessment-mode) .header-actions{gap:12px}
+body:is(.nesharo-site,.assessment-mode) .header-actions>.text-link{font-size:12px;color:var(--ui-ink)}
+html body:is(.nesharo-site,.assessment-mode) :is(.btn-dark,.btn-accent){background:var(--ui-green);color:var(--ui-on-green);border-color:var(--ui-green);box-shadow:none}
+html body:is(.nesharo-site,.assessment-mode) :is(.btn-dark,.btn-accent):hover{background:var(--ui-green-hover);color:var(--ui-on-green);transform:none}
+body:is(.nesharo-site,.assessment-mode) .btn{border-radius:6px;min-height:48px;padding:12px 22px;font-size:14px;font-weight:700}
+html body:is(.nesharo-site,.assessment-mode) .btn-outline{background:transparent;border-color:var(--ui-line);color:var(--ui-ink)}
+body:is(.nesharo-site,.assessment-mode) :is(.theme-toggle,.menu-toggle){background:transparent;border-color:var(--ui-line);color:var(--ui-ink);border-radius:6px;min-width:44px}
+html .nesharo-site #main>.hero{background:var(--ui-bg);color:var(--ui-ink);padding:72px 0 64px;border-bottom:1px solid var(--ui-line);border-radius:0;overflow:visible}
+.nesharo-site .hero .hero-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);gap:clamp(40px,6vw,96px);align-items:center}
+.nesharo-site .hero .hero-copy{max-width:none;padding:0;text-align:start}
+html .nesharo-site .hero .display{font-size:clamp(38px,4.3vw,64px);font-weight:600;line-height:1.48;letter-spacing:-.055em;margin:22px 0}
+.nesharo-site .hero .hero-title__line{display:block;white-space:normal}
+html .nesharo-site .hero h1 strong{color:var(--ui-green);font-weight:800;background:none}
+html .nesharo-site .hero .lead{font-size:17px;line-height:2.1;max-width:540px;color:var(--ui-muted);margin:0 0 28px}
+body:is(.nesharo-site,.assessment-mode) .eyebrow{color:var(--ui-copper);font-size:12px;font-weight:700;letter-spacing:0;background:none;padding:0}
+.nesharo-site .hero .hero-cta{display:flex;flex-wrap:wrap;gap:12px;justify-content:flex-start;margin:0}
+html .nesharo-site .hero .hero-note{display:flex;align-items:flex-start;gap:9px;font-size:12px;line-height:1.9;color:var(--ui-muted);margin-top:22px;max-width:490px}
+.nesharo-site .hero-note svg{width:18px;height:18px;flex-shrink:0;margin-top:3px}
+.nesharo-site .brand-folio{align-self:stretch;display:flex;flex-direction:column;justify-content:center;border-inline-start:1px solid var(--ui-line);padding:12px 36px 12px 0;min-width:0}
+.nesharo-site .folio-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:1px solid var(--ui-ink);padding-bottom:16px;font-size:12px;color:var(--ui-muted)}
+.nesharo-site .folio-heading strong{font-size:16px;color:var(--ui-ink)}
+.nesharo-site .folio-title{font-size:27px;line-height:1.6;margin:26px 0 8px}
+.nesharo-site .folio-intro{font-size:13px;color:var(--ui-muted);margin:0 0 12px}
+.nesharo-site .folio-list{list-style:none;counter-reset:folio;padding:0;margin:0}
+.nesharo-site .folio-list li{counter-increment:folio;display:grid;grid-template-columns:30px 1fr;gap:14px;border-bottom:1px solid var(--ui-line);padding:18px 0}
+.nesharo-site .folio-list li:before{content:'0' counter(folio);font-size:12px;color:var(--ui-copper);font-variant-numeric:tabular-nums;padding-top:3px}
+.nesharo-site .folio-list strong{display:block;font-size:16px;font-weight:700}
+.nesharo-site .folio-list p{margin:4px 0 0;font-size:13px;color:var(--ui-muted)}
+.nesharo-site .folio-foot{display:flex;gap:12px;align-items:center;padding-top:20px;font-size:12px;color:var(--ui-muted)}
+.nesharo-site .folio-foot svg{width:24px;height:24px;stroke:var(--ui-green);fill:none;stroke-width:1.6}
+html .nesharo-site .trust-bar{background:var(--ui-paper);border:0;border-bottom:1px solid var(--ui-line);padding:22px 0;color:var(--ui-muted)}
+.nesharo-site .trust-inner{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;font-size:13px}
+.nesharo-site .trust-inner strong{color:var(--ui-ink);font-weight:500}
+html .nesharo-site .section{background:var(--ui-bg);padding:88px 0;color:var(--ui-ink)}
+html .nesharo-site .section.soft{background:var(--ui-paper);border-block:1px solid var(--ui-line)}
+html .nesharo-site .section.light{background:var(--ui-bg)}
+.nesharo-site .section-heading{max-width:740px;margin-bottom:40px}
+.nesharo-site .section-heading.center{text-align:start;margin-inline:0}
+html .nesharo-site .section-title{font-size:clamp(27px,3vw,40px);line-height:1.55;color:var(--ui-ink);margin:10px 0 14px}
+html .nesharo-site :is(.section-subtitle,.section-heading p){color:var(--ui-muted);font-size:16px;line-height:2;max-width:660px}
+html .nesharo-site :is(.feature-card,.step-card,.white-card){background:transparent;color:var(--ui-ink);border:0;border-radius:0;box-shadow:none;transform:none}
+.nesharo-site .feature-grid{gap:32px}
+.nesharo-site .product-feature-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 48px;counter-reset:feature}
+html .nesharo-site .product-feature-card{display:grid;grid-template-columns:42px minmax(0,1fr);gap:8px 16px;padding:30px 0;border-top:1px solid var(--ui-line);align-content:start}
+.nesharo-site .product-feature-card>:not(.feature-icon){grid-column:2}
+.nesharo-site .product-feature-card .feature-icon{grid-row:1/5;background:none;padding:0;width:32px;height:32px;color:var(--ui-copper);border-radius:0}
+html .nesharo-site .feature-card h3{font-size:23px;margin:0 0 6px;color:var(--ui-ink)}
+html .nesharo-site .feature-card p{font-size:14px;color:var(--ui-muted);margin:0 0 8px}
+html .nesharo-site .feature-card .product-feature-result{color:var(--ui-ink)}
+.nesharo-site .product-feature-card small{font-size:12px;color:var(--ui-muted);background:none;padding:0;justify-self:start}
+.nesharo-site .feature-card .more{color:var(--ui-green);font-size:13px;margin-top:12px;min-height:44px;display:flex;align-items:center}
+.nesharo-site .steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:36px}
+html .nesharo-site .step-card{padding:24px 0 0;border-top:1px solid var(--ui-line)}
+html .nesharo-site .step-num{display:block;width:auto;height:auto;line-height:1;font-size:42px;font-weight:400;color:var(--ui-copper);background:none;border:0;margin-bottom:26px}
+.nesharo-site .step-card h3{font-size:21px;margin:0 0 12px}
+html .nesharo-site .step-card p{font-size:14px;color:var(--ui-muted)}
+html .nesharo-site .assessment-output-note{display:grid;grid-template-columns:1fr auto;gap:8px 32px;text-align:start;margin-top:40px;border:0;border-top:1px solid var(--ui-line);border-radius:0;padding:30px 0 0;background:none;color:var(--ui-ink)}
+.nesharo-site .assessment-output-note p{grid-column:1;font-size:14px;color:var(--ui-muted);margin:0;max-width:680px}
+.nesharo-site .assessment-output-note .btn{grid-column:2;grid-row:1/3;align-self:center}
+.nesharo-site .assessment-output-note small{grid-column:2;font-size:12px;color:var(--ui-muted)}
+html .nesharo-site .assessment-transparency{display:grid;grid-template-columns:1fr 1.2fr;gap:64px}
+html .nesharo-site .check-list li{font-size:14px;color:var(--ui-ink);padding-block:8px}
+html .nesharo-site .check-list svg{color:var(--ui-green)}
+html .nesharo-site .cta-block{display:grid;grid-template-columns:1fr auto;gap:16px 48px;text-align:start;background:var(--ui-green);color:var(--ui-on-green);border:0;border-radius:8px;padding:48px;box-shadow:none}
+html .nesharo-site .cta-block h2{font-size:30px;line-height:1.6;margin:0;color:inherit}
+html .nesharo-site .cta-block p{margin:0;color:inherit;opacity:.9;font-size:15px}
+html .nesharo-site .cta-block .btn{grid-column:2;grid-row:1/3;align-self:center;background:var(--ui-paper);border-color:var(--ui-paper);color:var(--ui-ink)}
+html .nesharo-site .page-hero{padding:72px 0 48px;background:var(--ui-bg);border-bottom:1px solid var(--ui-line);text-align:start;color:var(--ui-ink)}
+.nesharo-site .page-hero h1{font-size:clamp(32px,4vw,54px);line-height:1.5;max-width:900px;margin:16px 0}
+html .nesharo-site .page-hero p{font-size:17px;color:var(--ui-muted);max-width:760px;margin-inline:0}
+html .nesharo-site :is(.insight-art,.insight-sheet){background:var(--ui-paper);color:var(--ui-ink);border-radius:6px;box-shadow:none;transform:none}
+.nesharo-site .insight-art{padding:32px;border:1px solid var(--ui-line)}
+html .nesharo-site .insight-row{border-color:var(--ui-line);color:var(--ui-muted)}
+html .nesharo-site .insight-row strong{color:var(--ui-green)}
+html .nesharo-site .faq-list{max-width:900px;margin-inline:auto}
+html .nesharo-site .faq-list details{border:0;border-bottom:1px solid var(--ui-line);border-radius:0;background:none;padding:20px 0;color:var(--ui-ink)}
+html .nesharo-site .faq-list summary{font-size:18px;min-height:44px;color:var(--ui-ink)}
+html .nesharo-site .faq-list p{font-size:15px;line-height:2.1;color:var(--ui-muted);max-width:760px}
+html .nesharo-site .price-card{border:1px solid var(--ui-line);border-radius:8px;box-shadow:none;background:var(--ui-paper);color:var(--ui-ink);padding:32px}
+html .nesharo-site .price-card.featured{border-top:4px solid var(--ui-green);transform:none;background:var(--ui-soft)}
+html .nesharo-site .price-card :is(p,li,small){color:var(--ui-muted)}
+html .nesharo-site .price-card .price{color:var(--ui-ink);font-size:32px}
+html .nesharo-site :is(.legal-copy,.contact-card,.auth-card){color:var(--ui-ink);background:var(--ui-paper);border-color:var(--ui-line);border-radius:8px;box-shadow:none}
+html .nesharo-site :is(.legal-copy p,.legal-copy li){color:var(--ui-muted);font-size:16px;line-height:2.2}
+html body:is(.nesharo-site,.assessment-mode) .site-footer{background:var(--ui-paper);color:var(--ui-ink);padding-top:56px;border-top:1px solid var(--ui-line)}
+body:is(.nesharo-site,.assessment-mode) .site-footer :is(p,a:not(.logo),.footer-bottom){color:var(--ui-muted);font-size:13px}
+body:is(.nesharo-site,.assessment-mode) .site-footer .footer-group strong{color:var(--ui-ink);font-size:14px}
+body:is(.nesharo-site,.assessment-mode) .site-footer .footer-bottom{border-color:var(--ui-line);padding-block:24px;margin-top:40px}
+.workspace-mode,.account-mode{--bg:var(--ui-bg);--surface:var(--ui-paper);--surface-soft:var(--ui-soft);--soft:var(--ui-soft);--ink:var(--ui-ink);--text:var(--ui-ink);--muted:var(--ui-muted);--line:var(--ui-line);--border:var(--ui-line);--primary:var(--ui-green);--primary-soft:var(--ui-soft);--accent:var(--ui-green);--accent-soft:var(--ui-soft);--radius:8px;--shadow:none}
+.workspace-mode .sidebar{background:var(--ui-paper);padding:32px 20px;border-color:var(--ui-line)}
+.workspace-mode .brand{margin-bottom:36px;font-size:24px}
+.workspace-mode .sidebar-label{font-size:12px;color:var(--ui-muted)}
+.workspace-mode .main-nav a,.workspace-mode .sidebar-bottom a{font-size:14px;min-height:48px;border-radius:5px;padding:10px 12px;gap:12px}
+.workspace-mode :is(.main-nav,.sidebar-bottom,.mobile-nav) svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.workspace-mode .topbar{height:100px;gap:20px}
+.workspace-mode .topbar h1{font-size:28px;font-weight:600}
+.workspace-mode .breadcrumb{font-size:12px}
+.workspace-mode .page{max-width:1160px}
+.workspace-mode .command-hero,.workspace-mode .hero{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:28px;background:transparent;color:var(--ui-ink);border:0;border-bottom:1px solid var(--ui-line);border-radius:0;padding:40px 0;margin:0 0 30px}
+.workspace-mode :is(.command-hero,.hero) h2{font-size:32px;font-weight:600;line-height:1.6;margin:12px 0}
+.workspace-mode :is(.command-hero,.hero) p{color:var(--ui-muted);font-size:15px;max-width:700px}
+.workspace-mode .hero .eyebrow{color:var(--ui-copper)}
+.workspace-mode .card{box-shadow:none;border-radius:8px;padding:28px;background:var(--ui-paper);border-color:var(--ui-line)}
+.workspace-mode .quick-grid{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:28px;margin-top:28px}
+.workspace-mode .quick-grid>.card{border:0;border-top:2px solid var(--ui-line);background:none;border-radius:0;padding:24px 0}
+.workspace-mode .quick-grid h3{font-size:20px}
+.workspace-mode .action-link{font-size:14px;padding:17px 0}
+.workspace-mode :is(.card p,.ai-list,.ai-output strong,.field label,.review-row span,.review-row strong,.recent-row small,.library-card p){font-size:14px}
+.workspace-mode .muted,.workspace-mode .field-help{font-size:12px}
+.workspace-mode .button,.account-mode .button{border-radius:5px;font-size:14px;min-height:48px;background:var(--ui-green);color:var(--ui-on-green)}
+.workspace-mode .button.secondary,.account-mode .button.secondary{background:transparent;border-color:var(--ui-line);color:var(--ui-ink)}
+.workspace-mode .hero .button{background:var(--ui-green);color:var(--ui-on-green)}
+.workspace-mode :is(.tag.ok,.section-status.approved,.section-status-list button.approved){background:var(--ui-green);color:var(--ui-on-green)}
+.workspace-mode .page-heading{margin-block:36px 28px}
+.workspace-mode .page-heading h2{font-size:32px}
+.workspace-mode .roadmap ol{gap:0;margin-block:24px 32px;border-block:1px solid var(--ui-line)}
+.workspace-mode .roadmap li a{border:0;border-inline-end:1px solid var(--ui-line);border-radius:0;padding:20px 14px;min-height:100px}
+.workspace-mode .roadmap li small{font-size:12px}
+.workspace-mode .section-title h2{font-size:23px}
+.workspace-mode .field :is(input,textarea,select),.account-mode .field input:not([type=file]){background:var(--ui-paper);border-radius:5px;border-color:var(--ui-line);padding:13px 14px;min-height:52px}
+.workspace-mode .form-card{max-width:900px}
+.workspace-mode .form-grid{gap:8px 28px}
+.workspace-mode .ai-workbench{border-top:3px solid var(--ui-green);margin-top:32px}
+.workspace-mode .ai-setup{background:var(--ui-copper-soft);border-color:var(--ui-copper);border-radius:4px}
+.workspace-mode .library-card{border:0;border-bottom:1px solid var(--ui-line);border-radius:0;background:none;padding:26px 0;margin:0}
+.workspace-mode .library-card h3{font-size:21px}
+.workspace-mode .library-toolbar{gap:14px;margin-block:24px}
+.workspace-mode .library-toolbar input{min-width:0}
+.workspace-mode .day{border-radius:5px;min-height:220px}
+.workspace-mode .day h3{font-size:14px}
+.workspace-mode .day small,.workspace-mode .day .placeholder{font-size:12px}
+.account-mode .account-main{padding-inline:clamp(24px,5vw,80px);max-width:1400px}
+.account-mode .account-sidebar{background:var(--ui-paper);padding:30px 20px}
+.account-mode .sidebar-person{background:none;border:0;border-block:1px solid var(--ui-line);border-radius:0;padding:22px 0}
+.account-mode .account-nav a{border-radius:5px;font-size:14px}
+.account-mode .account-topbar{min-height:92px;margin-bottom:40px}
+.account-mode .page-heading{padding-bottom:24px;border-bottom:1px solid var(--ui-line);margin-bottom:32px}
+.account-mode .page-heading h1{font-size:34px;font-weight:600}
+.account-mode .page-heading p{font-size:15px}
+.account-mode .account-grid{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:28px}
+.account-mode .identity-card{border:0;border-bottom:1px solid var(--ui-line);border-radius:0;padding:8px 0 32px;background:none}
+.account-mode .identity-summary h2{font-size:26px}
+.account-mode .avatar{border-radius:50%}
+.account-mode .product-card{border-top:3px solid var(--ui-green)}
+.account-mode .card h2{font-size:22px}
+.account-mode .card p{font-size:14px}
+.account-mode .security-line{font-size:14px;padding-block:16px}
+.account-mode .account-form{max-width:960px;padding:36px}
+.account-mode .form-section{padding-bottom:28px;margin-bottom:32px}
+.account-mode .form-grid{gap:28px}
+.account-mode .form-footer{position:sticky;bottom:0;background:var(--ui-paper);padding-block:20px;margin-bottom:-20px;z-index:1}
+.assessment-mode{--pb-bg:var(--ui-bg);--pb-card:var(--ui-paper);--pb-ink:var(--ui-ink);--pb-muted:var(--ui-muted);--pb-line:var(--ui-line);--pb-primary:var(--ui-green);--pb-on-primary:var(--ui-on-green);--pb-selected:var(--ui-soft);--pb-focus:var(--ui-copper)}
+.assessment-mode>main{max-width:1040px;padding:48px 32px 80px}
+.assessment-mode main>h1{font-size:32px;font-weight:600;margin-bottom:30px}
+.assessment-mode main section,.assessment-mode main .card{border-radius:8px;padding:36px;background:var(--ui-paper);border-color:var(--ui-line);box-shadow:none}
+.assessment-mode main h2{font-size:27px;line-height:1.6}
+.assessment-mode main .question-card{padding:28px 0;margin-block:0;border:0;border-bottom:1px solid var(--ui-line);background:none;border-radius:0;box-shadow:none}
+.assessment-mode main .question-card legend{font-size:17px;line-height:1.9;font-weight:600;padding-block:12px}
+.assessment-mode main .choice-grid{gap:12px}
+.assessment-mode main .choice{border-radius:5px;background:var(--ui-bg);border:1px solid var(--ui-line);color:var(--ui-ink);min-height:60px;padding:14px;font-size:15px}
+.assessment-mode main .choice:has(input:checked){border-color:var(--ui-green);background:var(--ui-soft);box-shadow:inset -3px 0 var(--ui-green)}
+.assessment-mode main :is(input:not([type=radio]):not([type=checkbox]),textarea,select){background:var(--ui-paper);color:var(--ui-ink);border:1px solid var(--ui-line);border-radius:5px}
+.assessment-mode main progress{height:6px;border-radius:0}
+.assessment-mode main .actions{gap:12px;border-top:1px solid var(--ui-line);padding-top:24px;margin-top:28px;flex-wrap:wrap}
+.assessment-mode main :is(p,li){line-height:2.1}
+.admin-mode .shell{grid-template-columns:264px minmax(0,1fr)}
+.admin-mode aside{background:var(--ui-paper);border-color:var(--ui-line);padding-top:36px}
+.admin-mode aside .brand{font-size:26px;margin-bottom:40px}
+.admin-mode nav a{border-radius:5px;font-size:14px;padding:12px;color:var(--ui-muted)}
+.admin-mode nav a.active{background:var(--ui-soft);color:var(--ui-green);box-shadow:inset -3px 0 var(--ui-green)}
+.admin-mode .topbar{background:var(--ui-bg);border-color:var(--ui-line);height:88px}
+.admin-mode main{width:100%;padding:40px 40px 0;min-width:0}
+.admin-mode .page-heading{border-bottom:1px solid var(--ui-line);padding-bottom:28px;margin-bottom:28px}
+.admin-mode h1{font-size:34px;font-weight:600}
+.admin-mode .toolbar{border:0;border-block:1px solid var(--ui-line);border-radius:0;background:transparent;padding:22px 0;gap:18px}
+.admin-mode .metrics{gap:0;border:1px solid var(--ui-line);border-radius:6px;overflow:hidden;background:var(--ui-paper)}
+.admin-mode .metric{border:0;border-inline-end:1px solid var(--ui-line);border-radius:0;background:transparent;padding:26px}
+.admin-mode .metric:first-child{background:var(--ui-soft)}
+.admin-mode .metric strong{font-size:40px;color:var(--ui-ink)}
+.admin-mode .panel,.admin-mode .table-wrap{border-radius:6px;border-color:var(--ui-line);background:var(--ui-paper);box-shadow:none}
+.admin-mode th{background:var(--ui-soft);color:var(--ui-ink);font-size:13px;padding:16px}
+.admin-mode td{padding:20px 16px;font-size:13px}
+.admin-mode tbody tr:hover{background:var(--ui-bg)}
+.admin-mode :is(input,textarea,select){border-radius:5px;background:var(--ui-paper);border-color:var(--ui-line);color:var(--ui-ink)}
+.admin-mode button{border-radius:5px;background:var(--ui-green);color:var(--ui-on-green)}
+.admin-mode :is(button.secondary,button.quiet,.table-button){background:var(--ui-paper);color:var(--ui-ink);border-color:var(--ui-line)}
+.admin-mode :is(.muted,.minor,label,.metric p,.metric small,.breadcrumb){color:var(--ui-muted);font-size:12px}
+.admin-mode .login-panel{padding:44px;width:min(480px,100%);border-radius:8px;border-top:4px solid var(--ui-green);background:var(--ui-paper)}
+.admin-mode .login-panel h1{font-size:28px}
+.nesharo-site{overflow-x:visible}
+body.workspace-mode a.button:not(.secondary),body.account-mode a.button:not(.secondary){color:var(--ui-on-green)}
+body:is(.nesharo-site,.assessment-mode) .site-nav{background:transparent}
+.nesharo-site .folio-heading strong{color:var(--ui-ink)}
+.nesharo-site .cta-block::after{display:none}
+.workspace-mode .metric-grid{gap:0;border-block:1px solid var(--ui-line);margin-block:24px 36px}
+.workspace-mode .metric-grid>.metric{border:0;border-inline-end:1px solid var(--ui-line);border-radius:0;background:transparent;padding:24px}
+.workspace-mode .metric-grid .metric strong{font-size:28px}
+.workspace-mode .metric-grid .metric small{font-size:12px}
+.workspace-mode .dashboard-journal{margin-block:32px}
+.workspace-mode .dashboard-journal>.card{border:0;border-inline-start:2px solid var(--ui-copper);border-radius:0;background:none;padding:4px 24px}
+.assessment-mode main .assessment-intro{background:var(--ui-paper);border-top:3px solid var(--ui-green);padding-block:44px}
+.assessment-mode .intro-metrics{gap:0;border-block:1px solid var(--ui-line);margin-block:28px}
+.assessment-mode .intro-metrics span{border:0;border-inline-end:1px solid var(--ui-line);border-radius:0;background:none;padding:16px}
+.assessment-mode .step-navigation{gap:0;border-bottom:1px solid var(--ui-line);padding-bottom:12px}
+.assessment-mode .step-navigation span{border:0;border-radius:4px;background:none;font-size:13px}
+.assessment-mode main .result-hero{background:var(--ui-soft);border:0;border-top:3px solid var(--ui-green);padding:40px;border-radius:0}
+.assessment-mode main .result-hero h2{font-size:clamp(28px,4vw,42px);color:var(--ui-ink);margin-block:12px 20px}
+.assessment-mode main .result-hero p{max-width:720px;color:var(--ui-ink)}
+.assessment-mode main .grid{gap:0;border-block:1px solid var(--ui-line);margin-block:32px}
+.assessment-mode main .grid>.card{border:0;border-inline-end:1px solid var(--ui-line);border-radius:0;background:none;margin:0;padding:28px}
+.assessment-mode main .brandiyar-invite{border-top:3px solid var(--ui-copper);background:var(--ui-paper)}
+.assessment-mode main .brandiyar-invite .button{display:inline-flex;align-items:center;min-height:48px;padding:10px 20px;background:var(--ui-green);color:var(--ui-on-green);border-radius:5px}
+@media(min-width:1101px){
+  .workspace-mode .sidebar{width:272px;inset-inline-start:0;inset-inline-end:auto;border-inline-end:1px solid var(--ui-line)}
+  .workspace-mode .app-shell{margin-inline-start:272px;margin-inline-end:0;padding-inline:clamp(32px,4vw,64px)}
+}
+@media(max-width:1100px){
+  body:is(.nesharo-site,.assessment-mode) .header-inner{gap:16px;min-height:76px}
+  body:is(.nesharo-site,.assessment-mode) .site-nav{gap:12px}
+  body:is(.nesharo-site,.assessment-mode) .header-actions>.text-link{display:none}
+  .nesharo-site .hero .hero-grid{gap:36px}
+  .nesharo-site .brand-folio{padding-inline-start:24px}
+  .admin-mode .shell{grid-template-columns:216px minmax(0,1fr)}
+}
+@media(max-width:900px){
+  body:is(.nesharo-site,.assessment-mode) .container{width:calc(100% - 40px)}
+  html .nesharo-site #main>.hero{padding:48px 0}
+  .nesharo-site .hero .hero-grid{grid-template-columns:minmax(0,1fr);gap:40px}
+  .nesharo-site .hero .hero-copy{max-width:720px}
+  .nesharo-site .brand-folio{border-inline-start:0;border-top:1px solid var(--ui-line);padding:24px 0 0}
+  .nesharo-site .folio-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}
+  .nesharo-site .folio-list li{display:block}
+  .nesharo-site .folio-list li:before{display:block;margin-bottom:10px}
+  html .nesharo-site .section{padding:56px 0}
+  .nesharo-site .steps{gap:24px}
+  html .nesharo-site .assessment-transparency{grid-template-columns:1fr;gap:20px}
+  html .nesharo-site .cta-block{padding:32px;grid-template-columns:1fr;gap:20px}
+  html .nesharo-site .cta-block .btn{grid-column:auto;grid-row:auto;justify-self:start}
+  .workspace-mode .command-hero,.workspace-mode .hero{grid-template-columns:1fr;padding:30px 0;gap:18px}
+  .workspace-mode .quick-grid{grid-template-columns:1fr;gap:8px}
+  .workspace-mode .mobile-nav{box-shadow:0 -4px 20px #00000008}
+  .workspace-mode .mobile-nav a{font-size:11px;gap:5px}
+  .account-mode .account-main{padding-inline:24px}
+  .account-mode .account-topbar{margin-bottom:28px}
+}
+@media(max-width:800px){
+  body:is(.nesharo-site,.assessment-mode) .site-nav{top:100%;padding:16px 24px}
+  body:is(.nesharo-site,.assessment-mode) .site-nav.open{background:var(--ui-paper);border-bottom:1px solid var(--ui-line);box-shadow:none}
+}
+@media(max-width:760px){
+  html body:is(.nesharo-site,.assessment-mode) .site-nav{background:var(--ui-paper);border-color:var(--ui-line);color:var(--ui-ink);box-shadow:none}
+  body:is(.nesharo-site,.assessment-mode) .site-nav>a:not(.btn){font-size:15px;min-height:48px;padding:12px}
+  .nesharo-site .product-feature-grid{grid-template-columns:1fr;gap:0}
+  .nesharo-site .steps{grid-template-columns:1fr;gap:12px}
+  html .nesharo-site .step-card{display:grid;grid-template-columns:56px 1fr;gap:4px 16px;padding-top:24px}
+  .nesharo-site .step-card .step-num{grid-row:1/3;margin:5px 0;font-size:32px}
+  .nesharo-site .step-card h3{margin:0}
+  .nesharo-site .step-card p{grid-column:2}
+  html .nesharo-site .assessment-output-note{grid-template-columns:1fr;gap:16px}
+  .nesharo-site .assessment-output-note :is(.btn,small){grid-column:auto;grid-row:auto;justify-self:start}
+  .admin-mode .shell{display:block}
+  .admin-mode main{padding:28px 16px 0}
+  .admin-mode aside{width:260px}
+  .admin-mode .metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .admin-mode .metric{border-bottom:1px solid var(--ui-line);padding:18px}
+  .admin-mode .topbar{height:72px}
+  .admin-mode h1{font-size:27px}
+  .admin-mode .page-heading{flex-wrap:wrap}
+}
+@media(max-width:600px){
+  body:is(.nesharo-site,.assessment-mode) .container{width:calc(100% - 32px)}
+  body:is(.nesharo-site,.assessment-mode) .header-inner{min-height:72px;gap:10px}
+  body:is(.nesharo-site,.assessment-mode) .header-actions .btn{display:none}
+  html .nesharo-site .hero .display{font-size:36px;line-height:1.55;margin:16px 0 20px}
+  html .nesharo-site .hero .lead{font-size:16px}
+  .nesharo-site .hero .hero-cta{display:grid;grid-template-columns:1fr;width:100%}
+  .nesharo-site .folio-list{display:block}
+  .nesharo-site .folio-list li{display:grid;grid-template-columns:28px 1fr;padding:16px 0}
+  .nesharo-site .folio-list li:before{margin:0}
+  .nesharo-site .folio-title{font-size:24px}
+  .nesharo-site .folio-heading{font-size:11px}
+  .nesharo-site .trust-inner{justify-content:flex-start;gap:10px 22px;font-size:12px}
+  .nesharo-site .trust-inner strong{width:100%}
+  html .nesharo-site .section{padding:44px 0}
+  html .nesharo-site .cta-block{padding:28px 22px}
+  html .nesharo-site .cta-block h2{font-size:25px}
+  html .nesharo-site .cta-block .btn{width:100%}
+  html .nesharo-site .page-hero{padding:44px 0 32px}
+  .workspace-mode .command-hero h2,.workspace-mode .page-heading h2{font-size:27px}
+  .workspace-mode .topbar h1{font-size:23px}
+  .workspace-mode .card{padding:22px 18px}
+  .workspace-mode .quick-grid>.card{padding-inline:0}
+  .workspace-mode .roadmap ol{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .workspace-mode .roadmap li a{min-height:88px;padding:14px}
+  .workspace-mode .day{min-height:150px}
+  .workspace-mode .library-card{padding-inline:0}
+  .workspace-mode .calendar{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .account-mode .account-main{padding-inline:16px}
+  .account-mode .account-grid{grid-template-columns:1fr;gap:20px}
+  .account-mode .page-heading h1{font-size:28px}
+  .account-mode .identity-card{padding-bottom:24px}
+  .account-mode .identity-summary h2{font-size:22px}
+  .account-mode .account-form{padding:24px 18px}
+  .account-mode .form-footer{position:static}
+  .assessment-mode>main{padding:30px 16px 48px}
+  .assessment-mode main>h1{font-size:27px}
+  .assessment-mode main section,.assessment-mode main .card{padding:24px 18px}
+  .assessment-mode main h2{font-size:23px}
+  .assessment-mode main .question-card{padding:22px 0}
+  .assessment-mode main .choice-grid{grid-template-columns:1fr}
+  .assessment-mode main .likert{display:grid;grid-template-columns:1fr}
+  .admin-mode .login-panel{padding:28px 22px}
+}
+@media(prefers-reduced-motion:reduce){
+  body:is(.nesharo-site,.assessment-mode,.workspace-mode,.account-mode,.admin-mode) *,
+  body:is(.nesharo-site,.assessment-mode,.workspace-mode,.account-mode,.admin-mode) *::before,
+  body:is(.nesharo-site,.assessment-mode,.workspace-mode,.account-mode,.admin-mode) *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+}
+@media print{.assessment-mode .site-header,.assessment-mode .site-footer{display:none}.assessment-mode>main{max-width:none;padding:0}}

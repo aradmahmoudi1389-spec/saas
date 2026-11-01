@@ -16,7 +16,7 @@ class AccountTests(unittest.TestCase):
         return self.call('POST', '/api/account', {'csrf': csrf, **body}, cookie)
 
     def test_assets_and_minimal_snapshot(self):
-        for route in ('/account', '/account.js', '/account.css'):
+        for route in ('/account', '/account.js', '/account.css', '/design.css'):
             self.assertEqual(self.call(path=route)[0], 200)
         self.assertFalse(self.call(path='/api/account')[1]['data']['signedIn'])
         _, cookie = self.session()

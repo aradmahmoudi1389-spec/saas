@@ -1,8 +1,8 @@
 'use strict';
 (() => {
   const $ = id => document.getElementById(id);
-  let storedTheme='dark';
-  try {storedTheme=localStorage.getItem('brandyar-theme')||'dark';}catch{}
+  let storedTheme='light';
+  try {storedTheme=localStorage.getItem('brandyar-theme')||'light';}catch{}
   if(document.documentElement)document.documentElement.dataset.theme=storedTheme;
   function updateThemeButton(){const dark=document.documentElement?.dataset.theme==='dark',toggle=$('theme-toggle');if(toggle){toggle.setAttribute?.('aria-pressed',String(dark));toggle.setAttribute?.('aria-label',dark?'فعال‌کردن حالت روشن':'فعال‌کردن حالت تاریک');const icon=toggle.querySelector?.('use');icon?.setAttribute('href',dark?'#sun':'#moon');}}
   updateThemeButton();
