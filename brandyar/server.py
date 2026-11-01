@@ -24,6 +24,7 @@ import supabase_store
 import admin_workspace
 import personal_brand
 import brandyar_profile
+import brandyar_ai
 
 ASSESSMENT_COOKIE_KEY = secrets.token_bytes(32)
 ASSESSMENT_LEAD_ROLES = {'owner', 'support'}
@@ -631,6 +632,46 @@ class Handler(BaseHTTPRequestHandler):
         principal = personal_brand.session(self, db)
         return principal['owner_hash'] if principal else None
 
+    def brandyar_ai_generate(self, db, owner, data):
+        operation = data.get('operation')
+        if operation not in brandyar_ai.OPERATIONS:
+            raise ValueError('عملیات هوش مصنوعی معتبر نیست.')
+        identity = brandyar_profile.load(db, owner)
+        if operation in {'brand_voice', 'content_pillars', 'content_draft'} and identity.get('status') != 'approved':
+            raise ValueError('ابتدا هویت حرفه‌ای را تأیید کن.')
+        inputs = data.get('inputs') if isinstance(data.get('inputs'), dict) else {}
+        if operation in {'brand_voice', 'content_pillars', 'content_draft'}:
+            workspace = brandyar_profile.workspace_snapshot(db, owner)
+            inputs = {**inputs, 'brandVoice': workspace.get('brandVoice'),
+                      'contentPillars': workspace.get('contentPillars')}
+        output = brandyar_ai.generate(operation, identity, inputs)
+        if operation == 'content_draft':
+            output.update({key: inputs.get(key, '') for key in ('goal', 'format', 'pillar')})
+        return brandyar_profile.ai_save_output(db, owner, operation, inputs, output)
+
+    def brandyar_ai_write(self, db, owner, data):
+        action = data.get('action')
+        if action == 'ai_generate':
+            result = self.brandyar_ai_generate(db, owner, data)
+            return {'ai': result}
+        if action == 'ai_output_action':
+            result = brandyar_profile.ai_action(db, owner, data.get('outputId'), data.get('outputAction'), data.get('edited'))
+            return {'ai': result, 'workspace': brandyar_profile.workspace_snapshot(db, owner)}
+        if action == 'ai_feedback':
+            brandyar_profile.ai_feedback(db, owner, data.get('outputId'), data.get('rating'), data.get('note'))
+            return {'feedbackSaved': True}
+        if action == 'library_action':
+            library = brandyar_profile.ai_library_action(db, owner, data.get('itemId'), data.get('libraryAction'), data.get('title'), data.get('body'))
+            return {'library': library}
+        raise ValueError('درخواست هوش مصنوعی پشتیبانی نمی‌شود.')
+
+    def brandyar_snapshot(self, db, owner):
+        result = brandyar_profile.snapshot(db, owner)
+        result['aiReady'] = brandyar_ai.configured()
+        if brandyar_profile.access(db, owner)['status'] in {'trial', 'active'}:
+            result['workspace'] = brandyar_profile.workspace_snapshot(db, owner)
+        return result
+
     def brandyar_read(self):
         if not self.assessment_https():
             return self.json(403, {'error': 'این بخش به اتصال امن نیاز دارد.'})
@@ -642,7 +683,7 @@ class Handler(BaseHTTPRequestHandler):
                 'signedIn': True,
                 'csrf': db.execute('SELECT csrf FROM pb_sessions WHERE owner_hash=?', (owner,)).fetchone()['csrf'],
                 'demoAuth': True,
-                **brandyar_profile.snapshot(db, owner)
+                **self.brandyar_snapshot(db, owner)
             }})
 
     def brandyar_write(self):
@@ -659,26 +700,38 @@ class Handler(BaseHTTPRequestHandler):
                     return self.json(403, {'error': 'نشست فرم معتبر نیست؛ صفحه را دوباره باز کن.'})
                 action = data.get('action')
                 if action == 'identity_save':
-                    insight_approval = brandyar_profile.normalize_insight_approval(data.get('insightApproval'))
+                    insight_approval = data.get('insightApproval')
+                    if insight_approval not in (True, False):
+                        insight_approval = None
                     sections = brandyar_profile.validate_sections(data.get('sections'))
                     brandyar_profile.save(db, owner, data.get('identity') or {}, insight_approval, sections)
-                    return self.json(200, {'ok': True, 'data': brandyar_profile.snapshot(db, owner)})
+                    return self.json(200, {'ok': True, 'data': self.brandyar_snapshot(db, owner)})
                 if action == 'identity_approve':
                     approved_at = data.get('approvedAt')
                     brandyar_profile.approve(db, owner, approved_at if isinstance(approved_at, int) else None)
-                    return self.json(200, {'ok': True, 'data': brandyar_profile.snapshot(db, owner)})
+                    return self.json(200, {'ok': True, 'data': self.brandyar_snapshot(db, owner)})
                 if action == 'trial_grant':
                     plan = data.get('planId')
                     brandyar_profile.grant_trial(db, owner, plan if isinstance(plan, str) else '')
-                    return self.json(200, {'ok': True, 'data': brandyar_profile.snapshot(db, owner)})
+                    return self.json(200, {'ok': True, 'data': self.brandyar_snapshot(db, owner)})
                 if action == 'access_revoke':
                     result = brandyar_profile.revoke(db, owner)
                     return self.json(200, {'ok': True, 'data': {'access': result}})
+                if action in {'ai_generate', 'ai_output_action', 'ai_feedback', 'library_action'}:
+                    if brandyar_profile.access(db, owner)['status'] not in {'trial', 'active'}:
+                        return self.json(403, {'error': 'برای استفاده از این بخش، دسترسی برندیـار فعال نیست.'})
+                    return self.json(200, {'ok': True, 'data': self.brandyar_ai_write(db, owner, data)})
                 return self.json(422, {'error': 'این درخواست پشتیبانی نمی‌شود.'})
             except ValueError as error:
                 return self.json(422, {'error': str(error)})
             except (KeyError, TypeError, RecursionError):
                 return self.json(422, {'error': 'اطلاعات ارسال‌شده کامل یا معتبر نیست.'})
+            except brandyar_ai.AIUnavailable:
+                db.rollback()
+                return self.json(503, {'error': 'تنظیمات سرویس هوش مصنوعی هنوز تکمیل نشده است.'})
+            except brandyar_ai.AIResponseError:
+                db.rollback()
+                return self.json(503, {'error': 'نتوانستیم این پیش‌نویس را آماده کنیم. دوباره تلاش کن.'})
             except sqlite3.Error:
                 db.rollback()
                 return self.json(503, {'error': 'ذخیره‌سازی موقتاً در دسترس نیست؛ داده‌های قبلی حفظ شده‌اند.'})

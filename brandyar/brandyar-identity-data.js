@@ -31,7 +31,7 @@ window.BRANDYAR_IDENTITY={
   required:['professionalRole','industry','targetDescription','problems','valueProposition','professionalGoals'],
   lists:['skills','services','differentiators','professionalGoals','personalValues','preferredTopics','excludedTopics'],
   texts:['professionalRole','industry','experience','valueProposition','desiredPerception','targetDescription','primaryGroup'],
-  state:{identity:null,access:null,testCompleted:false,trialUsed:false,csrf:'',signedIn:false,demoAuth:true,error:'',loadFailed:false,saving:false},
+  state:{identity:null,access:null,workspace:{brandVoice:null,contentPillars:null,library:[]},aiReady:false,testCompleted:false,trialUsed:false,csrf:'',signedIn:false,demoAuth:true,error:'',loadFailed:false,saving:false},
   empty(){return {id:'brand-identity',status:'not_started',completionPercentage:0,professionalRole:'',industry:'',experience:'',skills:[],services:[],targetAudience:{description:'',primaryGroup:'',needs:[],problems:[]},valueProposition:'',differentiators:[],professionalGoals:[],personalValues:[],preferredTopics:[],excludedTopics:[],desiredPerception:'',testInsight:{exists:false,summary:'',isApprovedForBrandUse:false,source:''},approvedSections:[],draftSections:[],createdAt:null,updatedAt:null,approvedAt:null}},
   normalizeList(value){return [...new Set((Array.isArray(value)?value:String(value||'').split(/[،,\n]/)).map(x=>String(x).trim()).filter(Boolean).map(x=>x.slice(0,160)))].slice(0,20)},
   normalize(value){const base=this.empty(),v={...base,...(value||{}),targetAudience:{...base.targetAudience,...((value||{}).targetAudience||{})},testInsight:{...base.testInsight,...((value||{}).testInsight||{})},approvedSections:Array.isArray(value?.approvedSections)?value.approvedSections:[],draftSections:Array.isArray(value?.draftSections)?value.draftSections:[]};for(const key of this.lists)v[key]=this.normalizeList(v[key]);for(const key of ['needs','problems'])v.targetAudience[key]=this.normalizeList(v.targetAudience[key]);for(const key of this.texts){const nested=key==='targetDescription'?'description':key==='primaryGroup'?'primaryGroup':null;if(nested)v.targetAudience[nested]=String(v.targetAudience[nested]||'').trim().slice(0,2000);else v[key]=String(v[key]||'').trim().slice(0,2000)}return v},
@@ -51,6 +51,8 @@ window.BRANDYAR_IDENTITY={
       this.state.csrf=data.data?.csrf||'';
       this.state.identity=data.data?.identity||null;
       this.state.access=data.data?.access||{status:'none',planId:'',planName:'',simulation:true};
+      this.state.workspace=data.data?.workspace||{brandVoice:null,contentPillars:null,library:[]};
+      this.state.aiReady=Boolean(data.data?.aiReady);
       this.state.testCompleted=Boolean(data.data?.testCompleted);
       this.state.trialUsed=Boolean(data.data?.trialUsed);
       this.state.demoAuth=data.data?.demoAuth!==false;
@@ -63,7 +65,7 @@ window.BRANDYAR_IDENTITY={
       throw error;
     }
   },
-  dropSession(){this.state.signedIn=false;this.state.csrf='';this.state.identity=null;this.state.access=null;this.state.testCompleted=false;this.state.trialUsed=false},
+  dropSession(){this.state.signedIn=false;this.state.csrf='';this.state.identity=null;this.state.access=null;this.state.workspace={brandVoice:null,contentPillars:null,library:[]};this.state.aiReady=false;this.state.testCompleted=false;this.state.trialUsed=false},
   async migrateLegacy(){
     if(this.state.loadFailed||!this.state.signedIn)return;
     try{if(localStorage.getItem(this.migrated)==='1')return}catch{return}
@@ -84,7 +86,11 @@ window.BRANDYAR_IDENTITY={
   },
   async approve(approvedAt){return this.post({action:'identity_approve',approvedAt:approvedAt||null})},
   async grant(planId){return this.post({action:'trial_grant',planId})},
-  async post(body){this.state.saving=true;try{const res=await fetch('/api/brandyar',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,csrf:this.state.csrf})});const data=await res.json();if(res.status===401)this.dropSession();if(!res.ok){const error=new Error(data.error||'save');error.status=res.status;throw error}if(data.data.identity)this.state.identity=data.data.identity;if(data.data.access)this.state.access=data.data.access;this.state.error='';return data.data}catch(error){if(!error.status)error.message='ارتباط برقرار نشد؛ دوباره تلاش کن.';throw error}finally{this.state.saving=false}},
+  async aiGenerate(operation,inputs){return this.post({action:'ai_generate',operation,inputs})},
+  async aiAction(outputId,outputAction,edited){return this.post({action:'ai_output_action',outputId,outputAction,edited})},
+  async aiFeedback(outputId,rating,note){return this.post({action:'ai_feedback',outputId,rating,note})},
+  async libraryAction(itemId,libraryAction,title,body){return this.post({action:'library_action',itemId,libraryAction,title,body})},
+  async post(body){this.state.saving=true;try{const res=await fetch('/api/brandyar',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,csrf:this.state.csrf})});const data=await res.json();if(res.status===401)this.dropSession();if(!res.ok){const error=new Error(data.error||'save');error.status=res.status;throw error}if(data.data.identity)this.state.identity=data.data.identity;if(data.data.access)this.state.access=data.data.access;if(data.data.workspace)this.state.workspace=data.data.workspace;if(typeof data.data.aiReady==='boolean')this.state.aiReady=data.data.aiReady;this.state.error='';return data.data}catch(error){if(!error.status)error.message='ارتباط برقرار نشد؛ دوباره تلاش کن.';throw error}finally{this.state.saving=false}},
   accessLabel(access){if(!access)return 'نامشخص';return {trial:'دسترسی آزمایشی فعال',active:'دسترسی فعال',expired:'دسترسی پایان یافته',suspended:'دسترسی غیرفعال'}[access.status]||'بدون دسترسی فعال'},
   accessKey(access){return ['trial','active','expired','suspended'].includes(access?.status)?access.status:'none'},
   accessState(){

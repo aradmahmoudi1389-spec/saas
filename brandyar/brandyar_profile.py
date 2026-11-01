@@ -71,6 +71,50 @@ def initialize(db):
             simulation INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS pb_ai_outputs (
+            id TEXT PRIMARY KEY,
+            owner_hash TEXT NOT NULL,
+            operation TEXT NOT NULL,
+            status TEXT NOT NULL,
+            input_json TEXT NOT NULL,
+            output_json TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS pb_ai_outputs_owner ON pb_ai_outputs(owner_hash, updated_at);
+        CREATE TABLE IF NOT EXISTS pb_ai_feedback (
+            id TEXT PRIMARY KEY,
+            owner_hash TEXT NOT NULL,
+            output_id TEXT NOT NULL,
+            rating TEXT NOT NULL,
+            note TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS pb_brand_voice (
+            owner_hash TEXT PRIMARY KEY,
+            status TEXT NOT NULL,
+            body TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS pb_content_pillars (
+            owner_hash TEXT PRIMARY KEY,
+            status TEXT NOT NULL,
+            body TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS pb_content_items (
+            id TEXT PRIMARY KEY,
+            owner_hash TEXT NOT NULL,
+            title TEXT NOT NULL,
+            body TEXT NOT NULL,
+            metadata TEXT NOT NULL,
+            source TEXT NOT NULL,
+            status TEXT NOT NULL,
+            archived INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS pb_content_items_owner ON pb_content_items(owner_hash, updated_at);
     ''')
     db.commit()
 
@@ -380,9 +424,104 @@ def snapshot(db, owner):
             'testCompleted': test_completed(db, owner), 'trialUsed': trial_used(db, owner)}
 
 
-def normalize_insight_approval(value):
-    if value is None:
-        return None
-    if not isinstance(value, bool):
-        raise ValueError('وضعیت تأیید بینش تست معتبر نیست.')
-    return value
+
+
+def ai_save_output(db, owner, operation, inputs, output):
+    if not isinstance(operation, str) or not operation:
+        raise ValueError('عملیات هوش مصنوعی معتبر نیست.')
+    now = pb.now()
+    output_id = pb.uid()
+    db.execute('INSERT INTO pb_ai_outputs VALUES(?,?,?,?,?,?,?,?)',
+               (output_id, owner, operation, 'proposed', pb.dumps(inputs or {}), pb.dumps(output), now, now))
+    db.commit()
+    return {'id': output_id, 'operation': operation, 'status': 'proposed', 'inputs': inputs or {}, 'output': output, 'createdAt': now}
+
+
+def _ai_output(db, owner, output_id):
+    row = db.execute('SELECT * FROM pb_ai_outputs WHERE id=? AND owner_hash=?', (output_id, owner)).fetchone()
+    if not row:
+        raise ValueError('خروجی پیدا نشد یا متعلق به این نشست نیست.')
+    return row
+
+
+def _store_approved(db, table, owner, body):
+    now = pb.now()
+    db.execute(f'INSERT INTO {table} VALUES(?,?,?,?) ON CONFLICT(owner_hash) DO UPDATE SET status=excluded.status,body=excluded.body,updated_at=excluded.updated_at',
+               (owner, 'approved', pb.dumps(body), now))
+
+
+def ai_action(db, owner, output_id, action, edited=None):
+    if action not in {'accept', 'reject', 'edit', 'save'}:
+        raise ValueError('اقدام خروجی معتبر نیست.')
+    row = _ai_output(db, owner, output_id)
+    output = json.loads(row['output_json'])
+    if action == 'edit':
+        if not isinstance(edited, dict):
+            raise ValueError('ویرایش خروجی معتبر نیست.')
+        output.update(edited)
+        status = 'editing'
+    elif action == 'reject':
+        status = 'rejected'
+    else:
+        status = 'accepted'
+        if row['operation'] == 'brand_voice':
+            _store_approved(db, 'pb_brand_voice', owner, output)
+        elif row['operation'] == 'content_pillars':
+            _store_approved(db, 'pb_content_pillars', owner, output)
+        elif row['operation'] == 'content_draft':
+            now = pb.now()
+            title = str(output.get('title') or 'پیش‌نویس بدون عنوان')[:200]
+            body = str(output.get('body') or '')[:12000]
+            metadata = {'goal': output.get('goal', ''), 'format': output.get('format', ''), 'pillar': output.get('pillar', '')}
+            db.execute('INSERT INTO pb_content_items VALUES(?,?,?,?,?,?,?,?,?,?)',
+                       (pb.uid(), owner, title, body, pb.dumps(metadata), 'ai', 'draft', 0, now, now))
+    now = pb.now()
+    db.execute('UPDATE pb_ai_outputs SET status=?,output_json=?,updated_at=? WHERE id=? AND owner_hash=?',
+               (status, pb.dumps(output), now, output_id, owner))
+    db.commit()
+    return {'id': output_id, 'operation': row['operation'], 'status': status,
+            'inputs': json.loads(row['input_json'] or '{}'), 'output': output}
+
+
+def ai_feedback(db, owner, output_id, rating, note=''):
+    if rating not in {'useful', 'needs_revision', 'not_aligned'}:
+        raise ValueError('بازخورد خروجی معتبر نیست.')
+    _ai_output(db, owner, output_id)
+    db.execute('INSERT INTO pb_ai_feedback VALUES(?,?,?,?,?,?)',
+               (pb.uid(), owner, output_id, rating, str(note or '')[:500], pb.now()))
+    db.commit()
+
+
+def ai_library(db, owner):
+    rows = db.execute('SELECT * FROM pb_content_items WHERE owner_hash=? AND archived=0 ORDER BY updated_at DESC LIMIT 50', (owner,)).fetchall()
+    return [{'id': row['id'], 'title': row['title'], 'body': row['body'], 'metadata': json.loads(row['metadata']),
+             'source': row['source'], 'status': row['status'], 'createdAt': row['created_at'], 'updatedAt': row['updated_at']} for row in rows]
+
+
+def ai_library_action(db, owner, item_id, action, title=None, body=None):
+    if action not in {'archive', 'delete', 'edit', 'copy'}:
+        raise ValueError('اقدام کتابخانه معتبر نیست.')
+    row = db.execute('SELECT * FROM pb_content_items WHERE id=? AND owner_hash=? AND archived=0', (item_id, owner)).fetchone()
+    if not row:
+        raise ValueError('محتوا پیدا نشد یا متعلق به این نشست نیست.')
+    if action == 'archive':
+        db.execute('UPDATE pb_content_items SET archived=1,updated_at=? WHERE id=? AND owner_hash=?', (pb.now(), item_id, owner))
+    elif action == 'delete':
+        db.execute('DELETE FROM pb_content_items WHERE id=? AND owner_hash=?', (item_id, owner))
+    elif action == 'edit':
+        if not isinstance(title, str) or not isinstance(body, str):
+            raise ValueError('ویرایش محتوا معتبر نیست.')
+        db.execute('UPDATE pb_content_items SET title=?,body=?,status=?,updated_at=? WHERE id=? AND owner_hash=?',
+                   (title.strip()[:200], body.strip()[:12000], 'draft', pb.now(), item_id, owner))
+    db.commit()
+    return ai_library(db, owner)
+
+
+def workspace_snapshot(db, owner):
+    voice = db.execute('SELECT status,body,updated_at FROM pb_brand_voice WHERE owner_hash=?', (owner,)).fetchone()
+    pillars = db.execute('SELECT status,body,updated_at FROM pb_content_pillars WHERE owner_hash=?', (owner,)).fetchone()
+    return {
+        'brandVoice': {'status': voice['status'], 'body': json.loads(voice['body']), 'updatedAt': voice['updated_at']} if voice else None,
+        'contentPillars': {'status': pillars['status'], 'body': json.loads(pillars['body']), 'updatedAt': pillars['updated_at']} if pillars else None,
+        'library': ai_library(db, owner),
+    }
