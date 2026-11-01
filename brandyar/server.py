@@ -23,6 +23,7 @@ import brand_analysis
 import supabase_store
 import admin_workspace
 import personal_brand
+import brandyar_profile
 
 ASSESSMENT_COOKIE_KEY = secrets.token_bytes(32)
 ASSESSMENT_LEAD_ROLES = {'owner', 'support'}
@@ -82,6 +83,7 @@ def connect():
                 db.execute('CREATE INDEX consultation_requests_lookup ON consultation_requests(status,created_at)')
     admin_workspace.initialize(db)
     personal_brand.initialize(db)
+    brandyar_profile.initialize(db)
     return db
 
 
@@ -625,6 +627,62 @@ class Handler(BaseHTTPRequestHandler):
         except (sqlite3.Error, ValueError, TypeError):
             return self.json(503, {'error': brand_analysis.ERROR}, headers)
 
+    def brandyar_owner(self, db):
+        principal = personal_brand.session(self, db)
+        return principal['owner_hash'] if principal else None
+
+    def brandyar_read(self):
+        if not self.assessment_https():
+            return self.json(403, {'error': 'این بخش به اتصال امن نیاز دارد.'})
+        with connect() as db:
+            owner = self.brandyar_owner(db)
+            if not owner:
+                return self.json(200, {'ok': True, 'data': {'signedIn': False}})
+            return self.json(200, {'ok': True, 'data': {
+                'signedIn': True,
+                'csrf': db.execute('SELECT csrf FROM pb_sessions WHERE owner_hash=?', (owner,)).fetchone()['csrf'],
+                'demoAuth': True,
+                **brandyar_profile.snapshot(db, owner)
+            }})
+
+    def brandyar_write(self):
+        if not self.assessment_https() or not self.safe_origin():
+            return self.json(403, {'error': 'این درخواست به اتصال امن و معتبر نیاز دارد.'})
+        with connect() as db:
+            owner = self.brandyar_owner(db)
+            if not owner:
+                return self.json(401, {'error': 'نشست کاربری پیدا نشد؛ صفحه را دوباره باز کن.'})
+            principal = db.execute('SELECT csrf FROM pb_sessions WHERE owner_hash=?', (owner,)).fetchone()
+            try:
+                data = self.request_data(32768)
+                if not hmac.compare_digest(str(data.get('csrf', '')), principal['csrf']):
+                    return self.json(403, {'error': 'نشست فرم معتبر نیست؛ صفحه را دوباره باز کن.'})
+                action = data.get('action')
+                if action == 'identity_save':
+                    insight_approval = brandyar_profile.normalize_insight_approval(data.get('insightApproval'))
+                    sections = brandyar_profile.validate_sections(data.get('sections'))
+                    brandyar_profile.save(db, owner, data.get('identity') or {}, insight_approval, sections)
+                    return self.json(200, {'ok': True, 'data': brandyar_profile.snapshot(db, owner)})
+                if action == 'identity_approve':
+                    approved_at = data.get('approvedAt')
+                    brandyar_profile.approve(db, owner, approved_at if isinstance(approved_at, int) else None)
+                    return self.json(200, {'ok': True, 'data': brandyar_profile.snapshot(db, owner)})
+                if action == 'trial_grant':
+                    plan = data.get('planId')
+                    brandyar_profile.grant_trial(db, owner, plan if isinstance(plan, str) else '')
+                    return self.json(200, {'ok': True, 'data': brandyar_profile.snapshot(db, owner)})
+                if action == 'access_revoke':
+                    result = brandyar_profile.revoke(db, owner)
+                    return self.json(200, {'ok': True, 'data': {'access': result}})
+                return self.json(422, {'error': 'این درخواست پشتیبانی نمی‌شود.'})
+            except ValueError as error:
+                return self.json(422, {'error': str(error)})
+            except (KeyError, TypeError, RecursionError):
+                return self.json(422, {'error': 'اطلاعات ارسال‌شده کامل یا معتبر نیست.'})
+            except sqlite3.Error:
+                db.rollback()
+                return self.json(503, {'error': 'ذخیره‌سازی موقتاً در دسترس نیست؛ داده‌های قبلی حفظ شده‌اند.'})
+
     def do_GET(self):
         path = urlsplit(self.path).path
         if path in {'/assessment', '/assessment/'}:
@@ -634,7 +692,14 @@ class Handler(BaseHTTPRequestHandler):
             return personal_brand_instagram.callback(self, connect)
         if path in {'/api/personal-brand', '/api/admin/personal-brand'}:
             return personal_brand.dispatch(self, connect, admin=path.startswith('/api/admin/'))
+        if path in {'/brandyar', '/brandyar.html', '/brandyar.css', '/brandyar.js', '/plans-data.js', '/brandyar-identity-data.js', '/brandyar/plans', '/brandyar/activate', '/brandyar/dashboard', '/brandyar/profile'}:
+            name = 'brandyar.html' if path in {'/brandyar', '/brandyar.html', '/brandyar/plans', '/brandyar/activate', '/brandyar/dashboard', '/brandyar/profile'} else path[1:]
+            file = ROOT / name
+            return self.respond(200, file.read_bytes(), {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8'}[file.suffix])
+        if path == '/api/brandyar':
+            return self.brandyar_read()
         if path in {'/personal-brand', '/personal-brand.js', '/personal-brand.css', '/admin/personal-brand'}:
+
             if path == '/admin/personal-brand':
                 with connect() as db:
                     staff = self.session(db)
@@ -712,6 +777,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlsplit(self.path).path
+        if path == '/api/brandyar':
+            return self.brandyar_write()
         if path in {'/api/personal-brand', '/api/admin/personal-brand'}:
             return personal_brand.dispatch(self, connect, admin=path.startswith('/api/admin/'), write=True)
         if path == '/api/assessment/analyze':

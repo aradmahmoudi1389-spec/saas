@@ -127,4 +127,5 @@ dialog::backdrop { background: #10211b99; }
   .step-navigation { gap: 6px; }
   .step-navigation span { padding: 5px 9px; font-size: 12px; }
 }
+.brandiyar-invite{background:linear-gradient(135deg,#edf7ef,#fff);border:1px solid #cfe3d5!important}.brandiyar-invite h2{font-size:22px!important;margin:8px 0}.brandiyar-invite p{color:var(--pb-muted)}
 @media(prefers-reduced-motion:reduce) { * { scroll-behavior: auto !important; animation: none !important; transition: none !important; } }
