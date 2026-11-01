@@ -8,7 +8,7 @@ const access=()=>ID().state.access||{status:'none',planId:'',planName:'',simulat
 const me=()=>ID().current();
 const hasAccess=()=>['trial','active'].includes(access().status);
 const signedIn=()=>ID().state.signedIn;
-const testCompleted=()=>Boolean(me().testInsight?.exists);
+const testCompleted=()=>ID().state.testCompleted;
 const faDate=v=>v?new Date(v*1000).toLocaleString('fa-IR',{dateStyle:'medium',timeStyle:'short'}):'';
 let step=0;
 
