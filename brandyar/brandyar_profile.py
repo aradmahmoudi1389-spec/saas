@@ -2,6 +2,7 @@
 import base64
 import hashlib
 import json
+import re
 
 import personal_brand as pb
 
@@ -592,8 +593,10 @@ def save_account(db, owner, incoming):
         if not (prefix == 'data:image/png;base64' and raw.startswith(b'\x89PNG\r\n\x1a\n') or prefix == 'data:image/jpeg;base64' and raw.startswith(b'\xff\xd8\xff')):
             raise ValueError('تصویر حساب معتبر نیست.')
     result['avatar'] = avatar
-    if result['email'] and ('@' not in result['email'] or any(c.isspace() for c in result['email'])):
+    if result['email'] and not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', result['email']):
         raise ValueError('ایمیل معتبر وارد کن.')
+    if result['phone'] and not re.fullmatch(r'[+\d۰-۹٠-٩ ()-]{5,32}', result['phone']):
+        raise ValueError('شمارهٔ موبایل معتبر وارد کن.')
     db.execute('INSERT INTO pb_account_details VALUES(?,?,?) ON CONFLICT(owner_hash) DO UPDATE SET body=excluded.body,updated_at=excluded.updated_at',
                (owner, pb.dumps(result), pb.now()))
     db.commit()

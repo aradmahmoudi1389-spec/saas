@@ -1,15 +1,22 @@
 <!doctype html>
 <html lang="fa" dir="rtl" data-theme="light">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>پروفایل حساب</title>
-<link rel="stylesheet" href="/typography.css"><link rel="stylesheet" href="/brandyar.css">
-<script src="/plans-data.js" defer></script><script src="/brandyar-identity-data.js" defer></script><script src="/brandyar.js" defer></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>مرکز حساب کاربری</title>
+  <link rel="stylesheet" href="/typography.css">
+  <link rel="stylesheet" href="/account.css">
+  <script src="/account.js" defer></script>
 </head>
 <body class="account-mode">
-<main class="app-shell">
-<header class="topbar"><div><span>مدیریت حساب</span><h1 id="page-title">پروفایل حساب</h1></div><a href="/">بازگشت به سایت</a></header>
-<div id="app" aria-live="polite"></div>
-</main>
+  <a class="skip-link" href="#account-main">رفتن به محتوای حساب</a>
+  <div id="account-root" aria-busy="true">
+    <div class="account-loading" role="status">
+      <span>در حال بازیابی حساب…</span>
+      <div class="skeleton skeleton-title" aria-hidden="true"></div>
+      <div class="skeleton-grid" aria-hidden="true"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
+    </div>
+  </div>
+  <noscript>برای مدیریت حساب، اجرای جاوااسکریپت باید فعال باشد.</noscript>
 </body>
 </html>

@@ -688,6 +688,24 @@ class Handler(BaseHTTPRequestHandler):
             result.pop('identity', None)
         return result
 
+    def account_read(self):
+        if not self.assessment_https():
+            return self.json(403, {'error': 'این بخش به اتصال امن نیاز دارد.'})
+        try:
+            with connect() as db:
+                owner = self.brandyar_owner(db)
+                if not owner:
+                    return self.json(200, {'ok': True, 'data': {'signedIn': False}})
+                return self.json(200, {'ok': True, 'data': {
+                    'signedIn': True,
+                    'csrf': db.execute('SELECT csrf FROM pb_sessions WHERE owner_hash=?', (owner,)).fetchone()['csrf'],
+                    'account': brandyar_profile.account_details(db, owner),
+                    'testCompleted': brandyar_profile.test_completed(db, owner),
+                    'access': brandyar_profile.access(db, owner)
+                }})
+        except sqlite3.Error:
+            return self.json(503, {'error': 'بازیابی حساب موقتاً در دسترس نیست.'})
+
     def brandyar_read(self):
         if not self.assessment_https():
             return self.json(403, {'error': 'این بخش به اتصال امن نیاز دارد.'})
@@ -702,7 +720,7 @@ class Handler(BaseHTTPRequestHandler):
                 **self.brandyar_snapshot(db, owner)
             }})
 
-    def brandyar_write(self):
+    def brandyar_write(self, account_only=False):
         if not self.assessment_https() or not self.safe_origin():
             return self.json(403, {'error': 'این درخواست به اتصال امن و معتبر نیاز دارد.'})
         with connect() as db:
@@ -715,6 +733,8 @@ class Handler(BaseHTTPRequestHandler):
                 if not hmac.compare_digest(str(data.get('csrf', '')), principal['csrf']):
                     return self.json(403, {'error': 'نشست فرم معتبر نیست؛ صفحه را دوباره باز کن.'})
                 action = data.get('action')
+                if account_only and action not in {'account_save', 'account_logout'}:
+                    return self.json(422, {'error': 'این درخواست در مرکز حساب پشتیبانی نمی‌شود.'})
                 if action not in {'account_save', 'account_logout'}:
                     if not brandyar_profile.test_completed(db, owner):
                         return self.json(403, {'error': 'ابتدا تست را کامل کن.'})
@@ -730,11 +750,16 @@ class Handler(BaseHTTPRequestHandler):
                     db.commit()
                     return self.json(200, {'ok': True, 'data': {'access': brandyar_profile.access(db, owner)}})
                 if action == 'account_save':
+                    if account_only:
+                        account = data.get('account')
+                        name = account.get('name') if isinstance(account, dict) else None
+                        if not isinstance(name, str) or not name.strip() or len(name) > 100:
+                            raise ValueError('نام نمایشی را با حداکثر ۱۰۰ نویسه وارد کنید.')
                     return self.json(200, {'ok': True, 'data': {'account': brandyar_profile.save_account(db, owner, data.get('account'))}})
                 if action == 'account_logout':
                     db.execute('DELETE FROM pb_sessions WHERE owner_hash=?', (owner,))
                     db.commit()
-                    return self.json(200, {'ok': True, 'data': {'signedIn': False}})
+                    return self.json(200, {'ok': True, 'data': {'signedIn': False}}, headers={'Set-Cookie': '__Host-pb=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax'})
                 if action in {'settings_save', 'publication_save'}:
                     if brandyar_profile.access(db, owner)['status'] not in {'trial', 'active'}:
                         return self.json(403, {'error': 'دسترسی برندیـار فعال نیست.'})
@@ -796,6 +821,10 @@ class Handler(BaseHTTPRequestHandler):
             name = 'brandyar.html' if path in {'/brandyar', '/brandyar.html', '/brandyar/plans', '/brandyar/activate', '/brandyar/dashboard', '/brandyar/profile', '/brandyar/roadmap', '/brandyar/identity', '/brandyar/guide', '/brandyar/pillars', '/brandyar/create', '/brandyar/library', '/brandyar/calendar', '/brandyar/settings'} else path[1:]
             file = ROOT / name
             return self.respond(200, file.read_bytes(), {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8'}[file.suffix])
+        if path == '/api/account':
+            return self.account_read()
+        if path in {'/account.js', '/account.css'}:
+            return self.respond(200, (ROOT / path[1:]).read_bytes(), 'text/javascript; charset=utf-8' if path.endswith('.js') else 'text/css; charset=utf-8')
         if path == '/api/brandyar':
             return self.brandyar_read()
         if path in {'/personal-brand', '/personal-brand.js', '/personal-brand.css', '/admin/personal-brand'}:
@@ -877,6 +906,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlsplit(self.path).path
+        if path == '/api/account':
+            return self.brandyar_write(account_only=True)
         if path == '/api/brandyar':
             return self.brandyar_write()
         if path in {'/api/personal-brand', '/api/admin/personal-brand'}:
