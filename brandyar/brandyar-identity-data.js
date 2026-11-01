@@ -1,7 +1,4 @@
 window.BRANDYAR_IDENTITY={
-  storageKey:'brandyar-identity-v3',
-  legacyKeys:['brandyar-identity-v2'],
-  migrated:'brandyar-identity-migrated',
   sections:[
     {id:'work',title:'دربارهٔ کار تو',fields:[
       ['professionalRole','نقش یا عنوان حرفه‌ای','text','مثلاً مشاور کسب‌وکار یا طراح'],
@@ -52,11 +49,13 @@ window.BRANDYAR_IDENTITY={
       this.state.identity=data.data?.identity||null;
       this.state.access=data.data?.access||{status:'none',planId:'',planName:'',simulation:true};
       this.state.workspace=data.data?.workspace||{brandVoice:null,contentPillars:null,library:[]};
+      this.state.account=data.data?.account||{};
+      this.state.settings=data.data?.settings||{};
       this.state.aiReady=Boolean(data.data?.aiReady);
       this.state.testCompleted=Boolean(data.data?.testCompleted);
       this.state.trialUsed=Boolean(data.data?.trialUsed);
       this.state.demoAuth=data.data?.demoAuth!==false;
-      await this.migrateLegacy();
+      try{await this.importPreviousIdentity()}catch{this.state.error='اطلاعات قبلی هنوز ثبت نشده است؛ برای تلاش دوباره، بازیابی اطلاعات را انتخاب کن.'}
       return this.state;
     }catch(error){
       this.dropSession();
@@ -65,32 +64,27 @@ window.BRANDYAR_IDENTITY={
       throw error;
     }
   },
-  dropSession(){this.state.signedIn=false;this.state.csrf='';this.state.identity=null;this.state.access=null;this.state.workspace={brandVoice:null,contentPillars:null,library:[]};this.state.aiReady=false;this.state.testCompleted=false;this.state.trialUsed=false},
-  async migrateLegacy(){
-    if(this.state.loadFailed||!this.state.signedIn)return;
-    try{if(localStorage.getItem(this.migrated)==='1')return}catch{return}
-    let legacy=null;try{for(const key of this.legacyKeys){const raw=localStorage.getItem(key);if(raw){legacy=JSON.parse(raw);break}}}catch{}
-    try{
-      if(legacy&&legacy.professionalRole!==undefined&&!this.current().professionalRole){
-        await this.save(this.draftPointers(legacy));
-      }
-      localStorage.setItem(this.migrated,'1');
-    }catch{}
+  dropSession(){this.state.account={};this.state.settings={};this.state.signedIn=false;this.state.csrf='';this.state.identity=null;this.state.access=null;this.state.workspace={brandVoice:null,contentPillars:null,library:[]};this.state.aiReady=false;this.state.testCompleted=false;this.state.trialUsed=false},
+  async importPreviousIdentity(){
+    if(!this.state.signedIn||!['trial','active'].includes(this.state.access?.status)||this.current().createdAt)return;
+    let previous;
+    try{previous=JSON.parse(localStorage.getItem('brandyar-identity-v2')||'null')}catch{return}
+    if(previous?.professionalRole)await this.save(this.draftPointers(previous));
   },
-  // sections: the part keys the user just edited; the server un-approves only these and fails the save when approval is stale.
   async save(value,insightApproval,sections){
-    const current=this.current();
-    const payload={...this.draftPointers(current),...this.draftPointers(value||{})};
-    if(value?.targetAudience)payload.targetAudience={...current.targetAudience,...value.targetAudience};
+    const current=this.current(),incoming=value||{};
+    const payload={...this.draftPointers(current),...incoming};
+    if(incoming.targetAudience){for(const [key,nested] of Object.entries({targetDescription:'description',primaryGroup:'primaryGroup',needs:'needs',problems:'problems'})){if(nested in incoming.targetAudience)payload[key]=incoming.targetAudience[nested]}delete payload.targetAudience}
     return this.post({action:'identity_save',identity:payload,sections:Array.isArray(sections)&&sections.length?sections:undefined,...(insightApproval===undefined?{}:{insightApproval})});
   },
   async approve(approvedAt){return this.post({action:'identity_approve',approvedAt:approvedAt||null})},
   async grant(planId){return this.post({action:'trial_grant',planId})},
+  async revoke(){return this.post({action:'access_revoke'})},
   async aiGenerate(operation,inputs){return this.post({action:'ai_generate',operation,inputs})},
   async aiAction(outputId,outputAction,edited){return this.post({action:'ai_output_action',outputId,outputAction,edited})},
   async aiFeedback(outputId,rating,note){return this.post({action:'ai_feedback',outputId,rating,note})},
   async libraryAction(itemId,libraryAction,title,body){return this.post({action:'library_action',itemId,libraryAction,title,body})},
-  async post(body){this.state.saving=true;try{const res=await fetch('/api/brandyar',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,csrf:this.state.csrf})});const data=await res.json();if(res.status===401)this.dropSession();if(!res.ok){const error=new Error(data.error||'save');error.status=res.status;throw error}if(data.data.identity)this.state.identity=data.data.identity;if(data.data.access)this.state.access=data.data.access;if(data.data.workspace)this.state.workspace=data.data.workspace;if(typeof data.data.aiReady==='boolean')this.state.aiReady=data.data.aiReady;this.state.error='';return data.data}catch(error){if(!error.status)error.message='ارتباط برقرار نشد؛ دوباره تلاش کن.';throw error}finally{this.state.saving=false}},
+  async post(body){this.state.saving=true;try{const res=await fetch('/api/brandyar',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,csrf:this.state.csrf})});const data=await res.json();if(res.status===401)this.dropSession();if(!res.ok){const error=new Error(data.error||'save');error.status=res.status;throw error}if(data.data.account)this.state.account=data.data.account;if(data.data.settings)this.state.settings=data.data.settings;if(data.data.identity)this.state.identity=data.data.identity;if(data.data.access)this.state.access=data.data.access;if(data.data.workspace)this.state.workspace=data.data.workspace;if(typeof data.data.aiReady==='boolean')this.state.aiReady=data.data.aiReady;this.state.error='';return data.data}catch(error){if(!error.status)error.message='ارتباط برقرار نشد؛ دوباره تلاش کن.';throw error}finally{this.state.saving=false}},
   accessLabel(access){if(!access)return 'نامشخص';return {trial:'دسترسی آزمایشی فعال',active:'دسترسی فعال',expired:'دسترسی پایان یافته',suspended:'دسترسی غیرفعال'}[access.status]||'بدون دسترسی فعال'},
   accessKey(access){return ['trial','active','expired','suspended'].includes(access?.status)?access.status:'none'},
   accessState(){

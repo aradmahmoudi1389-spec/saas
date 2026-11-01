@@ -1,0 +1,57 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const vm=require('node:vm');
+const path=require('node:path');
+const app={innerHTML:''},heading={textContent:''};
+const context={console,URL,Date,Set,JSON,Boolean,String,Number,Error,FormData,Promise,
+  location:{pathname:'/brandyar/dashboard',hash:''},
+  document:{querySelector:s=>s==='#app'?app:s==='#page-title'?heading:null,querySelectorAll:()=>[],body:{classList:{toggle(){}}},documentElement:{dataset:{}}},
+  localStorage:{getItem:()=>null,setItem(){}},fetch:async()=>{throw new Error('offline')},
+  window:{addEventListener(){}},navigator:{},confirm:()=>false};
+vm.createContext(context);
+vm.runInContext(fs.readFileSync(path.join(__dirname,'brandyar-identity-data.js'),'utf8'),context);
+context.window.BRANDYAR_PLANS=[];
+const id=context.window.BRANDYAR_IDENTITY;
+const actualRefresh=id.refresh.bind(id),actualPost=id.post.bind(id);
+id.refresh=async()=>id.state;
+vm.runInContext(fs.readFileSync(path.join(__dirname,'brandyar.js'),'utf8'),context);
+const run=code=>vm.runInContext(code,context);
+id.state.signedIn=true;id.state.testCompleted=true;id.state.access={status:'trial'};id.state.aiReady=true;
+id.state.workspace={brandVoice:null,contentPillars:null,library:[]};
+let stages=run('brandStages()');
+assert.equal(stages.length,7);assert.equal(stages[0].status,'شروع نشده');assert.equal(stages[1].locked,true);
+id.state.identity={...id.empty(),professionalRole:'مشاور',industry:'آموزش'};
+assert.equal(run('brandStages()[0].href'),'#identity/direction');
+id.state.identity={...id.state.identity,professionalGoals:['رشد'],targetAudience:{description:'مدیران',needs:[],problems:['زمان']},valueProposition:'آموزش روشن',status:'ready_for_review'};
+stages=run('brandStages()');assert.equal(stages[0].status,'تکمیل‌شده');assert.equal(stages[1].status,'تکمیل‌شده');assert.equal(stages[2].status,'آمادهٔ بررسی');assert.equal(stages[2].href,'#identity/review');assert.equal(stages[3].locked,true);
+id.state.identity.status='approved';
+id.state.workspace.brandVoice={status:'approved',body:{}};
+id.state.workspace.contentPillars={status:'approved',body:{pillars:[]}};
+id.state.workspace.library=[{id:'1',title:'عنوان',body:'متن',needsRevision:false,status:'scheduled',metadata:{publishAt:'2026-12-01T10:00:00Z'}}];
+assert.ok(run('brandStages().every(s=>s.status==="تکمیل‌شده")'));
+id.state.workspace.brandVoice.status='needs_revision';
+stages=run('brandStages()');assert.equal(stages[3].status,'نیازمند بازبینی');assert.equal(stages[4].status,'نیازمند بازبینی');assert.equal(stages[4].locked,false);
+assert.match(run('create()'),/type="submit" disabled/);
+assert.doesNotMatch(run('pillars()'),/data-ai-generate="content_pillars"/);
+assert.match(run('guide()'),/نیازمند بازبینی/);
+context.location.pathname='/account';run('route()');assert.equal(heading.textContent,'پروفایل حساب');assert.doesNotMatch(app.innerHTML,/data-form="identity"|مسیر ساخت برند|متن<\/p>/);assert.match(app.innerHTML,/\/brandyar\/dashboard/);
+context.location.pathname='/brandyar/dashboard';context.location.hash='#pillars';run('route()');assert.equal(heading.textContent,'ستون‌های محتوایی');
+run('goToIdentity(1)');assert.equal(context.location.hash,'#identity/audience');assert.match(app.innerHTML,/data-section="audience"/);
+run('goToIdentity(2)');assert.equal(context.location.hash,'#identity/value');assert.match(app.innerHTML,/data-section="value"/);
+id.state.access={status:'none'};run('route()');assert.doesNotMatch(app.innerHTML,/data-ai-generate/);
+(async()=>{
+  let sent;id.post=async body=>{sent=body;return {}};
+  await id.save({targetDescription:'مخاطب تازه',needs:'نیاز تازه',professionalRole:'نقش تازه'});
+  assert.equal(sent.identity.targetDescription,'مخاطب تازه');assert.equal(sent.identity.needs,'نیاز تازه');assert.equal(sent.identity.professionalRole,'نقش تازه');assert.equal(sent.identity.industry,'آموزش');
+  await id.save({targetAudience:{description:'مخاطب تودرتو',problems:['مسئله']}});
+  assert.equal(sent.identity.targetDescription,'مخاطب تودرتو');assert.equal(sent.identity.problems[0],'مسئله');
+  id.post=actualPost;
+  id.state.account={name:'نام قبلی'};
+  context.fetch=async()=>({ok:false,status:503,json:async()=>({error:'ثبت انجام نشد'})});
+  await assert.rejects(()=>id.post({action:'account_save',account:{name:'نام تازه'}}),/ثبت انجام نشد/);
+  assert.equal(id.state.account.name,'نام قبلی');assert.equal(id.state.saving,false);
+  context.localStorage.getItem=key=>key==='brandyar-identity-v2'?JSON.stringify({professionalRole:'هویت قبلی'}):null;
+  context.fetch=async(url,options)=>options?.method==='POST'?{ok:false,status:503,json:async()=>({error:'ثبت انجام نشد'})}:{ok:true,json:async()=>({data:{signedIn:true,access:{status:'trial'},identity:null,testCompleted:true,account:{name:'نام حساب'}}})};
+  await actualRefresh();assert.equal(id.state.signedIn,true);assert.equal(id.state.account.name,'نام حساب');assert.match(id.state.error,/هنوز ثبت نشده/);assert.equal(id.state.loadFailed,false);
+  console.log('PASS: seven-stage transitions, stale dependency gates, editable prior stages, account isolation, identity saves, failed writes and non-destructive legacy import (Node VM).');
+})().catch(error=>{console.error(error);process.exitCode=1});

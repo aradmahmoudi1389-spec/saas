@@ -1,9 +1,6 @@
-"""Identity records and the profile access point for the private Brandyar panel.
-
-The signed-in owner is the existing assessment session cookie (`__Host-pb`), which is
-the only per-person identifier this project has. It is provisional: it is scoped to the
-browser, and it must be replaced by a real account layer when one exists.
-"""
+"""Account, identity and product records owned by the assessment session."""
+import base64
+import hashlib
 import json
 
 import personal_brand as pb
@@ -46,6 +43,12 @@ MAX_ITEM = 160
 def initialize(db):
     db.commit()
     db.executescript('''
+        CREATE TABLE IF NOT EXISTS pb_account_details (
+            owner_hash TEXT PRIMARY KEY, body TEXT NOT NULL, updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS pb_product_settings (
+            owner_hash TEXT PRIMARY KEY, body TEXT NOT NULL, updated_at INTEGER NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS pb_identity_records (
             owner_hash TEXT PRIMARY KEY,
             body TEXT NOT NULL,
@@ -382,15 +385,19 @@ def approve(db, owner, approved_at=None):
 def access(db, owner):
     row = db.execute('SELECT * FROM pb_identity_access WHERE owner_hash=?', (owner,)).fetchone()
     if not row:
-        return {'status': 'none', 'planId': '', 'planName': '', 'simulation': True}
-    plan = PLANS.get(row['plan_id'])
+        selected = product_settings(db, owner).get('selectedPlan', '')
+        return {'status': 'none', 'planId': selected, 'planName': PLANS.get(selected, {}).get('name', ''), 'simulation': True}
+    plan_id = row['plan_id'] if row['status'] in {'trial', 'active'} else product_settings(db, owner).get('selectedPlan', row['plan_id'])
+    plan = PLANS.get(plan_id)
     if not plan:
         return {'status': row['status'], 'planId': '', 'planName': '', 'simulation': bool(row['simulation'])}
-    return {'status': row['status'], 'planId': row['plan_id'], 'planName': plan['name'],
+    return {'status': row['status'], 'planId': plan_id, 'planName': plan['name'],
             'simulation': bool(row['simulation'])}
 
 
 def grant_trial(db, owner, plan_id):
+    if access(db, owner)['status'] == 'suspended':
+        raise ValueError('دسترسی این حساب غیرفعال شده است؛ فعال‌سازی نیازمند بررسی است.')
     if plan_id not in PLANS:
         raise ValueError('پلن انتخاب‌شده معتبر نیست.')
     now = pb.now()
@@ -450,19 +457,34 @@ def _store_approved(db, table, owner, body):
                (owner, 'approved', pb.dumps(body), now))
 
 
+def source_revision(artifact):
+    return hashlib.sha256(pb.dumps(artifact['body']).encode()).hexdigest() if artifact else None
+
+
 def ai_action(db, owner, output_id, action, edited=None):
     if action not in {'accept', 'reject', 'edit', 'save'}:
         raise ValueError('اقدام خروجی معتبر نیست.')
     row = _ai_output(db, owner, output_id)
+    if row['status'] in {'accepted', 'rejected'}:
+        raise ValueError('این پیشنهاد تعیین تکلیف شده است؛ پیشنهاد تازه بساز.')
     output = json.loads(row['output_json'])
     if action == 'edit':
         if not isinstance(edited, dict):
             raise ValueError('ویرایش خروجی معتبر نیست.')
+        if any(key.startswith('_') for key in edited):
+            raise ValueError('فرادادهٔ خروجی قابل ویرایش نیست.')
         output.update(edited)
         status = 'editing'
     elif action == 'reject':
         status = 'rejected'
     else:
+        if row['operation'] in {'brand_voice', 'content_pillars', 'content_draft'}:
+            workspace = workspace_snapshot(db, owner)
+            if load(db, owner)['status'] != 'approved' or output.get('_identityVersion') != version_count(db, owner):
+                raise ValueError('هویت تغییر کرده است؛ خروجی را با اطلاعات تازه دوباره بررسی کن.')
+            for operation, key, stamp in [('content_pillars', 'brandVoice', '_voiceRevision'), ('content_draft', 'brandVoice', '_voiceRevision'), ('content_draft', 'contentPillars', '_pillarsRevision')]:
+                if row['operation'] == operation and ((workspace.get(key) or {}).get('status') != 'approved' or output.get(stamp) != source_revision(workspace.get(key))):
+                    raise ValueError('پیش‌نیاز خروجی تغییر کرده است؛ پیشنهاد تازه بساز.')
         status = 'accepted'
         if row['operation'] == 'brand_voice':
             _store_approved(db, 'pb_brand_voice', owner, output)
@@ -472,7 +494,7 @@ def ai_action(db, owner, output_id, action, edited=None):
             now = pb.now()
             title = str(output.get('title') or 'پیش‌نویس بدون عنوان')[:200]
             body = str(output.get('body') or '')[:12000]
-            metadata = {'goal': output.get('goal', ''), 'format': output.get('format', ''), 'pillar': output.get('pillar', '')}
+            metadata = {key: output.get(key) for key in ('goal', 'format', 'pillar', '_identityVersion', '_voiceRevision', '_pillarsRevision')}
             db.execute('INSERT INTO pb_content_items VALUES(?,?,?,?,?,?,?,?,?,?)',
                        (pb.uid(), owner, title, body, pb.dumps(metadata), 'ai', 'draft', 0, now, now))
     now = pb.now()
@@ -517,11 +539,107 @@ def ai_library_action(db, owner, item_id, action, title=None, body=None):
     return ai_library(db, owner)
 
 
+def save_publication(db, owner, item_id, publish_at, status):
+    from datetime import datetime
+    if status not in {'draft', 'ready', 'scheduled', 'published'} or not isinstance(publish_at, str):
+        raise ValueError('وضعیت انتشار معتبر نیست.')
+    if publish_at:
+        try:
+            datetime.fromisoformat(publish_at.replace('Z', '+00:00'))
+        except ValueError:
+            raise ValueError('زمان انتشار معتبر نیست.')
+    if status == 'scheduled' and not publish_at:
+        raise ValueError('زمان انتشار را مشخص کن.')
+    row = db.execute('SELECT metadata FROM pb_content_items WHERE id=? AND owner_hash=? AND archived=0', (item_id, owner)).fetchone()
+    if not row:
+        raise ValueError('محتوا پیدا نشد.')
+    metadata = json.loads(row['metadata'])
+    item = next((item for item in workspace_snapshot(db, owner)['library'] if item['id'] == item_id), None)
+    if status != 'draft' and item and item['needsRevision']:
+        raise ValueError('این محتوا به بازبینی نیاز دارد؛ پیش از انتشار نسخهٔ هماهنگ تازه بساز.')
+    metadata['publishAt'] = publish_at
+    db.execute('UPDATE pb_content_items SET metadata=?,status=?,updated_at=? WHERE id=? AND owner_hash=?',
+               (pb.dumps(metadata), status, pb.now(), item_id, owner))
+    db.commit()
+    return workspace_snapshot(db, owner)
+
+
+def account_details(db, owner):
+    row = db.execute('SELECT body FROM pb_account_details WHERE owner_hash=?', (owner,)).fetchone()
+    return json.loads(row['body']) if row else {'name': '', 'email': '', 'phone': ''}
+
+
+def save_account(db, owner, incoming):
+    if not isinstance(incoming, dict):
+        raise ValueError('اطلاعات حساب معتبر نیست.')
+    result = {}
+    for key in ('name', 'email', 'phone'):
+        value = incoming.get(key, '')
+        if not isinstance(value, str) or len(value) > 200:
+            raise ValueError('اطلاعات حساب معتبر نیست.')
+        result[key] = value.strip()
+    avatar = incoming.get('avatar', account_details(db, owner).get('avatar', ''))
+    if not isinstance(avatar, str) or len(avatar) > 22000:
+        raise ValueError('تصویر حساب بیش از اندازه بزرگ است.')
+    if avatar:
+        prefix, separator, encoded = avatar.partition(',')
+        if not separator or prefix not in {'data:image/png;base64', 'data:image/jpeg;base64'}:
+            raise ValueError('تصویر حساب باید PNG یا JPEG باشد.')
+        try:
+            raw = base64.b64decode(encoded, validate=True)
+        except ValueError:
+            raise ValueError('تصویر حساب معتبر نیست.')
+        if not (prefix == 'data:image/png;base64' and raw.startswith(b'\x89PNG\r\n\x1a\n') or prefix == 'data:image/jpeg;base64' and raw.startswith(b'\xff\xd8\xff')):
+            raise ValueError('تصویر حساب معتبر نیست.')
+    result['avatar'] = avatar
+    if result['email'] and ('@' not in result['email'] or any(c.isspace() for c in result['email'])):
+        raise ValueError('ایمیل معتبر وارد کن.')
+    db.execute('INSERT INTO pb_account_details VALUES(?,?,?) ON CONFLICT(owner_hash) DO UPDATE SET body=excluded.body,updated_at=excluded.updated_at',
+               (owner, pb.dumps(result), pb.now()))
+    db.commit()
+    return result
+
+
+def product_settings(db, owner):
+    row = db.execute('SELECT body FROM pb_product_settings WHERE owner_hash=?', (owner,)).fetchone()
+    return json.loads(row['body']) if row else {'tone': '', 'format': '', 'length': ''}
+
+
+def save_product_settings(db, owner, incoming):
+    if not isinstance(incoming, dict):
+        raise ValueError('تنظیمات معتبر نیست.')
+    result = product_settings(db, owner)
+    for key in ('tone', 'format', 'length'):
+        value = incoming.get(key, '')
+        if not isinstance(value, str) or len(value) > 200:
+            raise ValueError('تنظیمات معتبر نیست.')
+        result[key] = value.strip()
+    db.execute('INSERT INTO pb_product_settings VALUES(?,?,?) ON CONFLICT(owner_hash) DO UPDATE SET body=excluded.body,updated_at=excluded.updated_at',
+               (owner, pb.dumps(result), pb.now()))
+    db.commit()
+    return result
+
+
 def workspace_snapshot(db, owner):
     voice = db.execute('SELECT status,body,updated_at FROM pb_brand_voice WHERE owner_hash=?', (owner,)).fetchone()
     pillars = db.execute('SELECT status,body,updated_at FROM pb_content_pillars WHERE owner_hash=?', (owner,)).fetchone()
-    return {
-        'brandVoice': {'status': voice['status'], 'body': json.loads(voice['body']), 'updatedAt': voice['updated_at']} if voice else None,
-        'contentPillars': {'status': pillars['status'], 'body': json.loads(pillars['body']), 'updatedAt': pillars['updated_at']} if pillars else None,
-        'library': ai_library(db, owner),
-    }
+    current_version = version_count(db, owner)
+    def artifact(row):
+        if not row:
+            return None
+        body = json.loads(row['body'])
+        stale = body.get('_identityVersion') != current_version
+        return {'status': 'needs_revision' if stale else row['status'], 'body': body, 'updatedAt': row['updated_at']}
+    voice_data, pillar_data = artifact(voice), artifact(pillars)
+    if pillar_data and (not voice_data or voice_data['status'] != 'approved' or pillar_data['body'].get('_voiceRevision') != source_revision(voice_data)):
+        pillar_data['status'] = 'needs_revision'
+    library = ai_library(db, owner)
+    for item in library:
+        item['needsRevision'] = item['source'] == 'ai' and (
+            item['metadata'].get('_identityVersion') != current_version
+            or not voice_data or voice_data['status'] != 'approved'
+            or not pillar_data or pillar_data['status'] != 'approved'
+            or item['metadata'].get('_voiceRevision') != source_revision(voice_data)
+            or item['metadata'].get('_pillarsRevision') != source_revision(pillar_data))
+    recent_outputs = [{'id': row['id'], 'operation': row['operation'], 'status': row['status'], 'output': json.loads(row['output_json']), 'inputs': json.loads(row['input_json']), 'updatedAt': row['updated_at']} for row in db.execute('SELECT * FROM pb_ai_outputs WHERE owner_hash=? ORDER BY updated_at DESC LIMIT 5', (owner,)).fetchall()]
+    return {'brandVoice': voice_data, 'contentPillars': pillar_data, 'library': library, 'recentOutputs': recent_outputs}

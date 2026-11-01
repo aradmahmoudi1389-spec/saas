@@ -142,6 +142,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Referrer-Policy', 'no-referrer')
         policy = "default-src 'none'; style-src 'self'; font-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+        if urlsplit(self.path).path == '/account':
+            policy = policy.replace("img-src 'self'", "img-src 'self' data:")
         if self.path in ('/', '/index.html'):
             policy = "default-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
         self.send_header('Content-Security-Policy', policy)
@@ -636,16 +638,26 @@ class Handler(BaseHTTPRequestHandler):
         operation = data.get('operation')
         if operation not in brandyar_ai.OPERATIONS:
             raise ValueError('عملیات هوش مصنوعی معتبر نیست.')
+        identity_version = brandyar_profile.version_count(db, owner)
         identity = brandyar_profile.load(db, owner)
         if operation in {'brand_voice', 'content_pillars', 'content_draft'} and identity.get('status') != 'approved':
             raise ValueError('ابتدا هویت حرفه‌ای را تأیید کن.')
         inputs = data.get('inputs') if isinstance(data.get('inputs'), dict) else {}
+        inputs = {**brandyar_profile.product_settings(db, owner), **{key: value for key, value in inputs.items() if value}}
         if operation in {'brand_voice', 'content_pillars', 'content_draft'}:
             workspace = brandyar_profile.workspace_snapshot(db, owner)
+            if operation == 'content_pillars' and (workspace.get('brandVoice') or {}).get('status') != 'approved':
+                raise ValueError('ابتدا راهنمای صدای برند را تأیید کن.')
+            if operation == 'content_draft' and not all((workspace.get(key) or {}).get('status') == 'approved' for key in ('brandVoice', 'contentPillars')):
+                raise ValueError('ابتدا راهنمای صدا و ستون‌های محتوایی را تأیید کن.')
             inputs = {**inputs, 'brandVoice': workspace.get('brandVoice'),
                       'contentPillars': workspace.get('contentPillars')}
         output = brandyar_ai.generate(operation, identity, inputs)
+        output['_identityVersion'] = identity_version
+        if operation in {'content_pillars', 'content_draft'}:
+            output['_voiceRevision'] = brandyar_profile.source_revision(inputs.get('brandVoice'))
         if operation == 'content_draft':
+            output['_pillarsRevision'] = brandyar_profile.source_revision(inputs.get('contentPillars'))
             output.update({key: inputs.get(key, '') for key in ('goal', 'format', 'pillar')})
         return brandyar_profile.ai_save_output(db, owner, operation, inputs, output)
 
@@ -662,14 +674,18 @@ class Handler(BaseHTTPRequestHandler):
             return {'feedbackSaved': True}
         if action == 'library_action':
             library = brandyar_profile.ai_library_action(db, owner, data.get('itemId'), data.get('libraryAction'), data.get('title'), data.get('body'))
-            return {'library': library}
+            return {'library': library, 'workspace': brandyar_profile.workspace_snapshot(db, owner)}
         raise ValueError('درخواست هوش مصنوعی پشتیبانی نمی‌شود.')
 
     def brandyar_snapshot(self, db, owner):
         result = brandyar_profile.snapshot(db, owner)
+        result['account'] = brandyar_profile.account_details(db, owner)
         result['aiReady'] = brandyar_ai.configured()
         if brandyar_profile.access(db, owner)['status'] in {'trial', 'active'}:
+            result['settings'] = brandyar_profile.product_settings(db, owner)
             result['workspace'] = brandyar_profile.workspace_snapshot(db, owner)
+        else:
+            result.pop('identity', None)
         return result
 
     def brandyar_read(self):
@@ -699,6 +715,33 @@ class Handler(BaseHTTPRequestHandler):
                 if not hmac.compare_digest(str(data.get('csrf', '')), principal['csrf']):
                     return self.json(403, {'error': 'نشست فرم معتبر نیست؛ صفحه را دوباره باز کن.'})
                 action = data.get('action')
+                if action not in {'account_save', 'account_logout'}:
+                    if not brandyar_profile.test_completed(db, owner):
+                        return self.json(403, {'error': 'ابتدا تست را کامل کن.'})
+                    if action not in {'plan_select', 'trial_grant'} and brandyar_profile.access(db, owner)['status'] not in {'trial', 'active'}:
+                        return self.json(403, {'error': 'دسترسی برندیـار فعال نیست.'})
+                if action == 'plan_select':
+                    plan = data.get('planId')
+                    if not isinstance(plan, str) or plan not in brandyar_profile.PLANS:
+                        raise ValueError('پلن معتبر انتخاب کن.')
+                    settings = brandyar_profile.product_settings(db, owner)
+                    settings['selectedPlan'] = plan
+                    db.execute('INSERT INTO pb_product_settings VALUES(?,?,?) ON CONFLICT(owner_hash) DO UPDATE SET body=excluded.body,updated_at=excluded.updated_at', (owner, personal_brand.dumps(settings), personal_brand.now()))
+                    db.commit()
+                    return self.json(200, {'ok': True, 'data': {'access': brandyar_profile.access(db, owner)}})
+                if action == 'account_save':
+                    return self.json(200, {'ok': True, 'data': {'account': brandyar_profile.save_account(db, owner, data.get('account'))}})
+                if action == 'account_logout':
+                    db.execute('DELETE FROM pb_sessions WHERE owner_hash=?', (owner,))
+                    db.commit()
+                    return self.json(200, {'ok': True, 'data': {'signedIn': False}})
+                if action in {'settings_save', 'publication_save'}:
+                    if brandyar_profile.access(db, owner)['status'] not in {'trial', 'active'}:
+                        return self.json(403, {'error': 'دسترسی برندیـار فعال نیست.'})
+                    if action == 'settings_save':
+                        return self.json(200, {'ok': True, 'data': {'settings': brandyar_profile.save_product_settings(db, owner, data.get('settings'))}})
+                    workspace = brandyar_profile.save_publication(db, owner, data.get('itemId'), data.get('publishAt', ''), data.get('status'))
+                    return self.json(200, {'ok': True, 'data': {'workspace': workspace}})
                 if action == 'identity_save':
                     insight_approval = data.get('insightApproval')
                     if insight_approval not in (True, False):
@@ -745,8 +788,12 @@ class Handler(BaseHTTPRequestHandler):
             return personal_brand_instagram.callback(self, connect)
         if path in {'/api/personal-brand', '/api/admin/personal-brand'}:
             return personal_brand.dispatch(self, connect, admin=path.startswith('/api/admin/'))
-        if path in {'/brandyar', '/brandyar.html', '/brandyar.css', '/brandyar.js', '/plans-data.js', '/brandyar-identity-data.js', '/brandyar/plans', '/brandyar/activate', '/brandyar/dashboard', '/brandyar/profile'}:
-            name = 'brandyar.html' if path in {'/brandyar', '/brandyar.html', '/brandyar/plans', '/brandyar/activate', '/brandyar/dashboard', '/brandyar/profile'} else path[1:]
+        if path == '/brandyar/profile':
+            return self.respond(303, content_type='text/html; charset=utf-8', headers={'Location': '/account'})
+        if path == '/account':
+            return self.respond(200, (ROOT / 'account.html').read_bytes(), 'text/html; charset=utf-8')
+        if path in {'/brandyar', '/brandyar.html', '/brandyar.css', '/brandyar.js', '/plans-data.js', '/brandyar-identity-data.js', '/brandyar/plans', '/brandyar/activate', '/brandyar/dashboard', '/brandyar/profile', '/brandyar/roadmap', '/brandyar/identity', '/brandyar/guide', '/brandyar/pillars', '/brandyar/create', '/brandyar/library', '/brandyar/calendar', '/brandyar/settings'}:
+            name = 'brandyar.html' if path in {'/brandyar', '/brandyar.html', '/brandyar/plans', '/brandyar/activate', '/brandyar/dashboard', '/brandyar/profile', '/brandyar/roadmap', '/brandyar/identity', '/brandyar/guide', '/brandyar/pillars', '/brandyar/create', '/brandyar/library', '/brandyar/calendar', '/brandyar/settings'} else path[1:]
             file = ROOT / name
             return self.respond(200, file.read_bytes(), {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8'}[file.suffix])
         if path == '/api/brandyar':
