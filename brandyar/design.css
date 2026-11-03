@@ -344,6 +344,137 @@ body:is(.nesharo-site,.assessment-mode) .site-nav{background:transparent}
   .assessment-mode main .likert{display:grid;grid-template-columns:1fr}
   .admin-mode .login-panel{padding:28px 22px}
 }
+.nesharo-site .feature-editorial{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.5fr);gap:72px;align-items:start}
+.nesharo-site .feature-editorial>.section-heading{position:sticky;top:124px;margin:0}
+.nesharo-site .feature-editorial .product-feature-grid{grid-template-columns:1fr}
+.nesharo-site .feature-editorial .product-feature-card{grid-template-columns:56px minmax(0,1fr);padding:30px 0}
+.nesharo-site .feature-editorial .product-feature-card h3{font-size:26px}
+.nesharo-site .method-editorial{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:24px 72px}
+.nesharo-site .method-editorial>.section-heading{margin:0;align-self:start}
+.nesharo-site .method-editorial .steps{grid-template-columns:1fr;gap:0}
+.nesharo-site .method-editorial .step-card{display:grid;grid-template-columns:52px 1fr;gap:8px 20px;padding:24px 0}
+.nesharo-site .method-editorial .step-card .step-num{grid-row:1/3;font-size:30px;margin:8px 0}
+.nesharo-site .method-editorial .step-card h3{margin:0}
+.nesharo-site .method-editorial .step-card p{grid-column:2}
+.nesharo-site .method-editorial>.assessment-output-note{grid-column:1/-1}
+html .nesharo-site .hero .hero-grid{align-items:stretch;gap:64px}
+.nesharo-site .hero .hero-copy{align-self:center;padding-block:20px}
+.nesharo-site .hero .brand-folio{position:relative;background:var(--ui-paper);border:1px solid var(--ui-line);padding:36px;border-radius:16px;box-shadow:8px 8px 0 var(--ui-soft)}
+.nesharo-site .folio-index{font-size:12px;letter-spacing:.1em;color:var(--ui-copper);padding-bottom:24px}
+.nesharo-site .folio-entry{display:flex;align-items:center;justify-content:space-between;min-height:52px;margin-top:20px;border-bottom:1px solid var(--ui-line);color:var(--ui-green);font-size:14px;font-weight:700}
+.nesharo-site .folio-foot{font-size:12px;line-height:1.9}
+.nesharo-site .page-intro{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);gap:64px;align-items:end}
+.nesharo-site .page-intro>p{padding-bottom:12px;font-size:16px}
+.nesharo-site .page-back{display:block;font-size:13px;color:var(--ui-muted);margin-bottom:20px;min-height:44px}
+body.workspace-mode .skip-link{position:fixed;top:-100px;right:20px;z-index:30;padding:12px 20px;background:var(--ui-paper);color:var(--ui-ink)}
+body.workspace-mode .skip-link:focus{top:12px}
+.workspace-mode #app,.workspace-mode .workspace-content{min-width:0}
+.workspace-mode .workspace-canvas{display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:32px;align-items:start;padding-block:32px}
+.workspace-mode .workspace-context{position:sticky;top:24px;min-width:0}
+.workspace-mode .workspace-context .roadmap{border:0;background:transparent;padding:0;margin:0}
+.workspace-mode .workspace-context .section-heading-row{display:block}
+.workspace-mode .workspace-context .section-heading-row>a{display:inline-flex;align-items:center;min-height:44px;font-size:13px;color:var(--ui-green)}
+.workspace-mode .workspace-context .roadmap ol{grid-template-columns:1fr;border:0;margin-top:12px}
+.workspace-mode .workspace-context .roadmap li a{min-height:72px;padding:12px 16px;border:0;border-inline-start:2px solid var(--ui-line);background:none;border-radius:0;box-shadow:none}
+.workspace-mode .workspace-context .roadmap a[aria-current=step]{border-inline-start-color:var(--ui-green);background:var(--ui-soft)}
+.workspace-mode .workspace-context .roadmap li span{font-size:13px}
+.workspace-mode .workspace-heading{border-bottom:1px solid var(--ui-line);padding-bottom:24px}
+.workspace-mode .workspace-heading h2{font-size:clamp(26px,2.8vw,38px)}
+.workspace-mode .workspace-canvas .workspace-heading{margin-top:0}
+.workspace-mode .workspace-canvas .form-card{max-width:none}
+.workspace-mode .workspace-tools{display:none}
+.workspace-mode .roadmap-grid{grid-template-columns:1fr;gap:0;counter-reset:stage}
+.workspace-mode .roadmap-grid>.card{display:grid;grid-template-columns:minmax(150px,.65fr) minmax(0,1fr);gap:12px 36px;border:0;border-bottom:1px solid var(--ui-line);border-radius:0;background:transparent;padding:32px 0}
+.workspace-mode .roadmap-grid>.card>h3{font-size:24px;grid-column:1;grid-row:2}
+.workspace-mode .roadmap-grid>.card>.tag{justify-self:start;grid-column:1;grid-row:1}
+.workspace-mode .roadmap-grid>.card>p{grid-column:2;grid-row:1/3;align-self:center;margin:0}
+.workspace-mode .roadmap-grid>.card>dl{grid-column:2;margin:0;display:grid;grid-template-columns:60px 1fr;gap:8px 16px;font-size:14px}
+.workspace-mode .roadmap-grid>.card>.draft-text{grid-column:2}
+.workspace-mode .roadmap-grid>.card>.button{grid-column:1;justify-self:start;align-self:start}
+.workspace-mode .roadmap-grid>form.card{display:block;border:1px solid var(--ui-line);border-radius:8px;background:var(--ui-paper);padding:24px;margin-bottom:16px}
+.workspace-mode .library-list{border-top:1px solid var(--ui-line)}
+.workspace-mode .library-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px}
+.account-mode .account-overview{grid-template-columns:minmax(0,1.35fr) minmax(250px,.85fr);align-items:start}
+.account-mode .account-overview .identity-card{background:var(--ui-paper);border:1px solid var(--ui-line);border-radius:12px;padding:32px}
+.account-mode .account-product-zone,.account-mode .account-support-zone{min-width:0}
+.account-mode .zone-heading{margin-bottom:20px}
+.account-mode .zone-heading>span{font-size:12px;color:var(--ui-copper)}
+.account-mode .zone-heading h2{font-size:26px;margin:4px 0 0}
+.account-mode .account-product-zone .product-card{padding:32px;border-radius:12px}
+.account-mode .account-support-zone>.card{background:transparent;border:0;border-block:1px solid var(--ui-line);border-radius:0;padding:28px 0}
+.account-mode .account-quick-links{padding-top:28px}
+.account-mode .account-quick-links h2{font-size:18px}
+.account-mode .account-quick-links p{font-size:14px;color:var(--ui-muted)}
+.account-mode .account-quick-links .button{display:flex;justify-content:space-between;border:0;border-bottom:1px solid var(--ui-line);border-radius:0;padding-inline:0}
+.account-mode .account-edit-layout{display:grid;grid-template-columns:minmax(180px,.65fr) minmax(0,1.5fr);gap:40px;align-items:start}
+.account-mode .account-edit-guide{position:sticky;top:24px}
+.account-mode .account-edit-guide h2{font-size:26px;margin-block:12px}
+.account-mode .account-edit-guide p{font-size:14px;color:var(--ui-muted);line-height:2.1}
+.account-mode .account-edit-guide a{display:inline-flex;align-items:center;min-height:44px;color:var(--ui-green);font-size:14px}
+.account-mode .account-edit-layout .account-form{width:100%;padding:28px}
+.assessment-mode .stage-progress{position:sticky;top:88px;z-index:5;background:var(--ui-bg);border-bottom:1px solid var(--ui-line);padding-block:16px}
+.assessment-mode main .question-card{scroll-margin-top:190px}
+.assessment-mode main .result-hero{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:12px 40px}
+.assessment-mode main .result-hero>h2{grid-column:1;grid-row:2/5;margin:0;align-self:center}
+.assessment-mode main .result-hero>p{margin:0;font-size:15px}
+.assessment-mode main .result-hero>p:first-child{grid-column:1/-1;font-size:12px;color:var(--ui-muted)}
+.assessment-mode main .result-hero>p:not(:first-child){grid-column:2}
+.admin-mode .toolbar{position:sticky;top:0;z-index:4;background:var(--ui-bg)}
+.admin-mode .table-wrap{max-height:70vh;overscroll-behavior:contain}
+.admin-mode .table-wrap th{position:sticky;top:0;z-index:1}
+.admin-mode .panel-heading{padding-bottom:20px;border-bottom:1px solid var(--ui-line)}
+:root{--ui-danger-bg:#a13832;--ui-danger-fg:#ffffff;--ui-disabled-bg:#e0e2da;--ui-disabled-fg:#51594e}
+:root[data-theme=dark]{--ui-danger-bg:#f0aba2;--ui-danger-fg:#361713;--ui-disabled-bg:#354238;--ui-disabled-fg:#c0cabc}
+html body:is(.nesharo-site,.assessment-mode,.workspace-mode,.account-mode,.admin-mode) :is(.btn,.button,button){transition:background-color .16s,color .16s,border-color .16s;white-space:normal;overflow-wrap:anywhere}
+html body:is(.nesharo-site,.assessment-mode,.workspace-mode,.account-mode,.admin-mode) :is(.button,.btn,button):disabled{background:var(--ui-disabled-bg);color:var(--ui-disabled-fg);border-color:var(--ui-line);opacity:1;box-shadow:none;cursor:not-allowed}
+html body:is(.workspace-mode,.account-mode,.admin-mode) :is(.button:not(.secondary),button.danger,.logout-button):not(:disabled){background:var(--ui-green);color:var(--ui-on-green)}
+html body:is(.workspace-mode,.account-mode,.admin-mode) :is(.button:not(.secondary)):not(:disabled):hover{background:var(--ui-green-hover);color:var(--ui-on-green)}
+html body:is(.workspace-mode,.account-mode,.admin-mode) :is(.logout-button,button.danger):not(:disabled){background:var(--ui-danger-bg);color:var(--ui-danger-fg);border-color:var(--ui-danger-bg)}
+html body:is(.nesharo-site,.assessment-mode,.workspace-mode,.account-mode,.admin-mode) :is(button,.button,.btn):not(:disabled):active{translate:0 1px}
+@media(min-width:901px) and (max-width:1350px){
+  .workspace-mode .workspace-canvas{grid-template-columns:minmax(0,1fr)}
+  .workspace-mode .workspace-context{position:static;grid-row:2;border-top:1px solid var(--ui-line);padding-top:24px}
+  .workspace-mode .workspace-context .roadmap ol{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:1000px){
+  .nesharo-site .feature-editorial,.nesharo-site .method-editorial{gap:32px;grid-template-columns:1fr}
+  .nesharo-site .feature-editorial>.section-heading{position:static}
+  .nesharo-site .feature-editorial .product-feature-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:0 28px}
+  .account-mode .account-edit-layout{grid-template-columns:1fr;gap:24px}
+  .account-mode .account-edit-guide{position:static}
+}
+@media(max-width:900px){
+  .nesharo-site .page-intro{grid-template-columns:1fr;gap:16px}
+  .nesharo-site .hero .brand-folio{padding:28px}
+  .workspace-mode .workspace-canvas{grid-template-columns:1fr;padding-top:24px;gap:24px}
+  .workspace-mode .workspace-context{position:static;grid-row:2;border-top:1px solid var(--ui-line);padding-top:24px}
+  .workspace-mode .workspace-context .roadmap ol{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .workspace-mode .workspace-tools{display:block;margin-block:20px 0;border:1px solid var(--ui-line);border-radius:8px;background:var(--ui-paper)}
+  .workspace-mode .workspace-tools summary{padding:12px 16px;min-height:48px;cursor:pointer;font-size:14px;font-weight:700}
+  .workspace-mode .workspace-tools nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:8px 16px 16px}
+  .workspace-mode .workspace-tools a{display:flex;align-items:center;min-height:44px;padding:8px 12px;border:1px solid var(--ui-line);border-radius:5px;font-size:13px;color:var(--ui-ink)}
+  .workspace-mode .workspace-tools a[aria-current=page]{background:var(--ui-soft);border-color:var(--ui-green);color:var(--ui-green)}
+  .account-mode .account-overview{grid-template-columns:1fr;gap:28px}
+  .assessment-mode .stage-progress{top:76px}
+}
+@media(max-width:600px){
+  .nesharo-site .feature-editorial .product-feature-grid{grid-template-columns:1fr}
+  html .nesharo-site .hero .hero-grid{gap:32px}
+  .nesharo-site .hero .brand-folio{padding:24px 20px;box-shadow:4px 4px 0 var(--ui-soft)}
+  .nesharo-site .method-editorial .step-card{grid-template-columns:36px 1fr;gap:8px 12px}
+  .workspace-mode .roadmap-grid>.card{display:block;padding-block:24px}
+  .workspace-mode .roadmap-grid>.card>h3{margin-block:12px}
+  .workspace-mode .roadmap-grid>.card>dl{margin-block:20px}
+  .workspace-mode .library-card{grid-template-columns:1fr;gap:12px}
+  .account-mode .account-overview .identity-card{padding:24px 20px}
+  .account-mode .account-product-zone .product-card{padding:24px 20px}
+  .account-mode .account-edit-layout .account-form{padding:24px 18px}
+  .assessment-mode main .result-hero{display:block;padding:28px 20px}
+  .assessment-mode main .result-hero>h2{margin-block:16px}
+  .assessment-mode main .result-hero>p{margin-block:12px}
+  .assessment-mode .stage-progress{top:72px}
+  .admin-mode .toolbar{position:static}
+}
 @media(prefers-reduced-motion:reduce){
   body:is(.nesharo-site,.assessment-mode,.workspace-mode,.account-mode,.admin-mode) *,
   body:is(.nesharo-site,.assessment-mode,.workspace-mode,.account-mode,.admin-mode) *::before,

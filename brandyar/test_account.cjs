@@ -14,6 +14,9 @@ async function harness(data) {
 (async()=>{
   const {center,root,listeners} = await harness({signedIn:true,csrf:'test',account:{name:'مریم نمونه',email:'user@example.test'},testCompleted:true,access:{status:'trial'}});
   assert.match(root.innerHTML,/نمای کلی حساب/);
+  assert.match(root.innerHTML,/class="account-product-zone"/);
+  assert.match(root.innerHTML,/class="account-support-zone"/);
+  assert.doesNotMatch(root.innerHTML,/data-ai-generate|data-form="identity"/);
   assert.doesNotMatch(root.innerHTML,/<form/);
   assert.match(root.innerHTML,/aria-current="page"/);
   assert.match(root.innerHTML,/دسترسی آزمایشی/);
