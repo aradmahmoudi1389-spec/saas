@@ -41,7 +41,7 @@ const AccountCenter = (() => {
   function productCard() {
     const access = accessInfo(state.data);
     if (access.testOnly) return `<article class="card"><div class="card-icon">${icon('information')}</div><h2>ادامهٔ مسیر شما</h2><p>تست هنوز کامل نشده است. از همان مسیر، پاسخ‌ها را ادامه دهید و نتیجه را ببینید.</p>${action(access.href,access.action)}</article>`;
-    return `<article class="card product-card"><div class="product-head"><img src="/logo.jpg" alt="لوگوی برندیـار"><div><h2>برندیـار</h2><small>محصول مستقل</small></div></div><p>فضای کاری ساخت هویت حرفه‌ای و محتوای هماهنگ با برند</p><span class="badge">${esc(access.label)}</span>${state.data.access?.status==='trial'?'<p class="help">این دسترسی آزمایشی است و اشتراک پرداخت‌شده محسوب نمی‌شود.</p>':''}${state.data.access?.status==='suspended'?'<p class="help">فعال‌سازی این دسترسی نیازمند بررسی است.</p>':''}${action(access.href,access.action)}</article>`;
+    return `<article class="card product-card"><div class="product-head"><img src="/landing-logo.png" alt="لوگوی برندیـار"><div><h2>برندیـار</h2><small>محصول مستقل</small></div></div><p>فضای کاری ساخت هویت حرفه‌ای و محتوای هماهنگ با برند</p><span class="badge">${esc(access.label)}</span>${state.data.access?.status==='trial'?'<p class="help">این دسترسی آزمایشی است و اشتراک پرداخت‌شده محسوب نمی‌شود.</p>':''}${state.data.access?.status==='suspended'?'<p class="help">فعال‌سازی این دسترسی نیازمند بررسی است.</p>':''}${action(access.href,access.action)}</article>`;
   }
   function securityLines() {
     return `<div class="security-lines"><div class="security-line"><span>وضعیت ورود</span><strong>نشست جاری معتبر است</strong></div><div class="security-line"><span>اطلاعات تماس</span><strong>تأیید مالکیت انجام نشده</strong></div></div>`;

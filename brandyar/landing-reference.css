@@ -1,14 +1,5 @@
 @font-face{font-family:NesharoLanding;src:url('/fonts/Vazirmatn-Regular.woff2') format('woff2');font-display:swap}
-:root{
-  --landing-bg:#05131f;--landing-card:#0b2436;--landing-raised:#103049;
-  --landing-line:#28546b;--landing-text:#f2fbff;--landing-muted:#b2c6d4;
-  --landing-teal:#46ecd6;--landing-blue:#55b8f3;
-  --landing-primary-bg:linear-gradient(110deg,#46ecd6,#55b8f3);
-  --landing-primary-hover:linear-gradient(110deg,#8af5e5,#8ed4ff);
-  --landing-primary-fg:#052435;--landing-secondary-bg:#0b2436;
-  --landing-secondary-fg:#f2fbff;--landing-focus:#90ffee;
-  --landing-disabled-bg:#20384a;--landing-disabled-fg:#cadce6;
-}
+
 html body.nesharo-site.landing-mode{
   background:radial-gradient(ellipse at 17% 15%,#07364b88,transparent 36%),var(--landing-bg);
   color:var(--landing-text);font-family:NesharoLanding,var(--font-main),Tahoma,sans-serif;

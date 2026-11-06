@@ -2,13 +2,13 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const read = name => fs.readFileSync(`${__dirname}/${name}`, 'utf8');
-const html = read('index.html');
+const html = require('node:child_process').execFileSync('python3',['-c',"from pathlib import Path; import site_chrome; print(site_chrome.render_document(Path('index.html').read_bytes(), '/').decode(), end='')"],{cwd:__dirname,encoding:'utf8'});
 const css = read('design.css');
 for (const name of ['index.html', 'personal-brand.html', 'account.html', 'brandyar.html', 'admin.html', 'admin-login.html', 'admin-workspace.html']) {
   const source = read(name);
   const head = source.slice(0, source.indexOf('</head>'));
   const styles = [...head.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/g)].map(match => match[1]);
-  assert.equal(styles.at(-1), name === 'index.html' ? '/landing-reference.css' : '/design.css', `${name}: final design stylesheet`);
+  assert.equal(styles.at(-1), name.startsWith('admin') ? '/design.css' : '/site-theme.css', `${name}: final design stylesheet`);
   assert.equal(styles.filter(path => path === '/design.css').length, 1);
 }
 function home(source) {
@@ -30,6 +30,9 @@ assert.match(externalHome,/مسیر برند شخصی‌ات را شروع کن/
 assert.match(html,/aria-label="پیوندهای شرکت"/);
 assert.match(html,/aria-label="پیوندهای تکمیلی"/);
 assert.match(html,/class="footer-unavailable" aria-disabled="true">وبلاگ/);
+const headerMarkup=html.match(/<header class="site-header site-chrome">[\s\S]*?<\/header>/)[0];
+assert.doesNotMatch(headerMarkup,/منابع یادگیری/);
+assert.deepEqual([...headerMarkup.matchAll(/data-link="([^"]+)"/g)].map(match=>match[1]),['home','assessment','features','how-it-works','pricing','faq']);
 assert.equal((externalHome.match(/data-count-target=/g)||[]).length,4);
 assert.match(externalHome, /class="landing-cta-card"/);
 assert.match(externalHome, /href="\/personal-brand"/);
@@ -63,7 +66,7 @@ for (const [background,foreground] of [['#245444','#fffdf8'],['#183e32','#fffdf8
   assert.ok((values[0]+.05)/(values[1]+.05)>=4.5, `Button contrast ${background}/${foreground}`);
 }
 const landingCSS = read('landing-reference.css');
-const landingTokens = Object.fromEntries([...landingCSS.matchAll(/--landing-([\w-]+):\s*(#[\da-f]{6})(?=;|\})/g)].map(match => [match[1],match[2]]));
+const landingTokens = Object.fromEntries([...read('site-theme.css').matchAll(/--landing-([\w-]+):\s*(#[\da-f]{6})(?=;|\})/g)].map(match => [match[1],match[2]]));
 for (const background of ['#46ecd6','#55b8f3','#8af5e5','#8ed4ff']) {
   const values=[luminance(background),luminance(landingTokens['primary-fg'])].sort((a,b)=>b-a);
   assert.ok((values[0]+.05)/(values[1]+.05)>=4.5,'Landing gradient contrast');
@@ -71,6 +74,11 @@ for (const background of ['#46ecd6','#55b8f3','#8af5e5','#8ed4ff']) {
 for (const foreground of ['text','muted','secondary-fg']) {
   const values=[luminance(landingTokens[foreground]),luminance(landingTokens.card)].sort((a,b)=>b-a);
   assert.ok((values[0]+.05)/(values[1]+.05)>=4.5,'Landing text contrast');
+}
+const themeTokens=Object.fromEntries([...read('site-theme.css').matchAll(/--site-([\w-]+):\s*(#[\da-f]{6})(?=;|\})/g)].map(match=>[match[1],match[2]]));
+for(const type of ['danger','success','warning']) {
+  const values=[luminance(themeTokens[type+'-bg']),luminance(themeTokens[type+'-fg'])].sort((a,b)=>b-a);
+  assert.ok((values[0]+.05)/(values[1]+.05)>=4.5,`${type} contrast`);
 }
 const disabledContrast=[luminance(landingTokens['disabled-fg']),luminance(landingTokens['disabled-bg'])].sort((a,b)=>b-a);
 assert.ok((disabledContrast[0]+.05)/(disabledContrast[1]+.05)>=4.5,'Landing disabled button contrast');
@@ -81,7 +89,7 @@ assert.match(externalHome,/data-home-section="landing-preview"/);
 assert.match(externalHome,/href="\/brandyar\/dashboard"/);
 assert.doesNotMatch(externalHome,/class="landing-n"|class="cta-orb"|src="\/logo.jpg"|href="#\/app"/);
 assert.match(html,/class="landing-login"/);
-assert.match(html,/href="\/account" class="landing-login"/);
+assert.match(html,/class="landing-login" href="\/account"/);
 assert.ok((html.match(/src="\/landing-logo.png"/g)||[]).length>=5);
 assert.equal(require('node:crypto').createHash('sha256').update(fs.readFileSync(`${__dirname}/landing-logo.png`)).digest('hex'),'ac1f2dc4676946533da67611013f2a8f83c7ce708f9cd91857454881324ae923');
 for (const match of externalHome.matchAll(/<use href="#([^"]+)"/g)) assert.ok(html.includes(`id="${match[1]}"`),`Missing SVG ${match[1]}`);

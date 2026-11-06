@@ -1,0 +1,187 @@
+@font-face{font-family:NesharoSite;src:url('/fonts/Vazirmatn-Regular.woff2') format('woff2');font-display:swap}
+@font-face{font-family:NesharoSite;src:url('/fonts/Vazirmatn-Bold.woff2') format('woff2');font-weight:700 900;font-display:swap}
+:root{
+  --landing-bg:#05131f;--landing-card:#0b2436;--landing-raised:#103049;
+  --landing-line:#28546b;--landing-text:#f2fbff;--landing-muted:#b2c6d4;
+  --landing-teal:#46ecd6;--landing-blue:#55b8f3;
+  --landing-primary-bg:linear-gradient(110deg,#46ecd6,#55b8f3);
+  --landing-primary-hover:linear-gradient(110deg,#8af5e5,#8ed4ff);
+  --landing-primary-fg:#052435;--landing-secondary-bg:#0b2436;
+  --landing-secondary-fg:#f2fbff;--landing-focus:#90ffee;
+  --landing-disabled-bg:#20384a;--landing-disabled-fg:#cadce6;
+  --site-space-1:8px;--site-space-2:16px;--site-space-3:24px;--site-space-4:32px;--site-space-5:48px;
+  --site-radius:18px;--site-radius-small:12px;--site-header-height:88px;
+  --site-body-size:16px;--site-small-size:13px;--site-shadow:0 18px 42px #0003;
+  --site-danger-bg:#50262e;--site-danger-fg:#ffd6da;--site-danger-line:#a56370;
+  --site-success-bg:#103d3e;--site-success-fg:#9ef4db;--site-warning-bg:#403323;--site-warning-fg:#ffe2ad;
+}
+:root,:root[data-theme=dark]{
+  --ui-bg:var(--landing-bg);--ui-paper:var(--landing-card);--ui-ink:var(--landing-text);--ui-muted:var(--landing-muted);
+  --ui-line:var(--landing-line);--ui-green:var(--landing-teal);--ui-green-hover:var(--landing-blue);
+  --ui-soft:var(--landing-raised);--ui-copper:var(--landing-blue);--ui-copper-soft:var(--landing-raised);--ui-on-green:var(--landing-primary-fg);
+  --ui-danger-bg:var(--site-danger-bg);--ui-danger-fg:var(--site-danger-fg);
+  --ui-disabled-bg:var(--landing-disabled-bg);--ui-disabled-fg:var(--landing-disabled-fg);
+  --color-bg:var(--landing-bg);--color-surface:var(--landing-card);--color-surface-raised:var(--landing-raised);
+  --color-text:var(--landing-text);--color-text-muted:var(--landing-muted);--color-border:var(--landing-line);
+  --color-primary:var(--landing-teal);--color-primary-soft:var(--landing-raised);--color-focus:var(--landing-focus);
+}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode){
+  --bg:var(--landing-bg);--surface:var(--landing-card);--soft:var(--landing-raised);--surface-soft:var(--landing-raised);
+  --text:var(--landing-text);--ink:var(--landing-text);--muted:var(--landing-muted);--line:var(--landing-line);--border:var(--landing-line);
+  --accent:var(--landing-teal);--accent-soft:var(--landing-raised);--primary:var(--landing-teal);--primary-soft:var(--landing-raised);
+  --danger:var(--site-danger-fg);--danger-soft:var(--site-danger-bg);--radius:var(--site-radius);--shadow:var(--site-shadow);
+  --pb-bg:var(--landing-bg);--pb-card:var(--landing-card);--pb-ink:var(--landing-text);--pb-muted:var(--landing-muted);
+  --pb-line:var(--landing-line);--pb-primary:var(--landing-teal);--pb-on-primary:var(--landing-primary-fg);--pb-selected:var(--landing-raised);
+  --pb-focus:var(--landing-focus);
+  background:radial-gradient(ellipse at 18% 12%,#0a455f44,transparent 40%),linear-gradient(150deg,var(--landing-bg),#071c2a);
+  color:var(--landing-text);font-family:NesharoSite,Tahoma,sans-serif;font-size:var(--site-body-size);line-height:1.95;color-scheme:dark;
+}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) :is(h1,h2,h3,h4){color:var(--landing-text)}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) :is(a,button,input,textarea,select,summary):focus-visible{outline:3px solid var(--landing-focus);outline-offset:4px}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) :is(.help,.muted,.field-help,.field small){color:var(--landing-muted)}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-header.site-chrome{
+  position:sticky;inset-block-start:0;z-index:35;background:transparent;border:0;box-shadow:none;backdrop-filter:blur(10px);
+}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-header.site-chrome:before{content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,#05131ffa,#05131fe8);opacity:.08;transition:opacity 240ms ease;pointer-events:none}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode).has-scrolled .site-header.site-chrome{background:transparent;box-shadow:none}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode).has-scrolled .site-header.site-chrome:before{opacity:1}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .container{width:min(1216px,calc(100% - 64px));max-width:1216px;margin-inline:auto;padding-inline:0}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .header-inner{height:auto;min-height:var(--site-header-height);display:flex;align-items:center;justify-content:space-between;gap:24px}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .logo{display:inline-flex;align-items:center;gap:8px;font-size:23px;font-weight:800;letter-spacing:0;white-space:nowrap;color:var(--landing-text);text-decoration:none}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .ribbon-wordmark{display:block;width:62px;height:42px;object-fit:contain;border:0;filter:none}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .site-nav{display:flex;gap:24px;background:none;margin-inline:auto;align-items:center}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .site-nav>a{position:relative;display:flex;align-items:center;min-height:44px;padding:10px 0;border:0;text-decoration:none;color:var(--landing-muted);font-size:13px;font-weight:600;white-space:nowrap}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .site-nav>a:is(.active,:hover){color:var(--landing-text)}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .site-nav>a.active:after{content:'';position:absolute;inset:auto 0 0;height:2px;background:var(--landing-teal);box-shadow:0 0 12px #46ecd650}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .header-actions{display:flex;align-items:center;gap:0}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome #theme-toggle{display:none}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .landing-login{display:inline-flex;align-items:center;justify-content:center;gap:12px;min-height:44px;padding:8px 22px;border:1px solid var(--landing-line);border-radius:var(--site-radius-small);background:transparent;color:var(--landing-secondary-fg);font-size:13px;text-decoration:none}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .landing-login:hover{border-color:var(--landing-teal);background:var(--landing-secondary-bg);color:var(--landing-secondary-fg)}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .menu-toggle{display:none;place-items:center;min-width:44px;height:44px;min-height:44px;padding:0;background:var(--landing-card);border:1px solid var(--landing-line);color:var(--landing-text);border-radius:var(--site-radius-small)}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-footer.site-chrome{background:linear-gradient(180deg,#04121f,#030d17);border-top:1px solid #2b6b7c55;color:var(--landing-text);padding:0}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .footer-main{display:grid;grid-template-columns:minmax(0,1.35fr) repeat(3,minmax(0,1fr));align-items:start;gap:42px;padding-block:var(--site-space-5) var(--site-space-4)}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .footer-brand{grid-column:auto;display:block}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .footer-brand>p{max-width:270px;margin:18px 0 0;color:var(--landing-muted);font-size:13px;line-height:2.1}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .footer-group{display:grid;gap:var(--site-space-2);align-content:start}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .footer-group>strong{color:var(--landing-text);font-size:15px;font-weight:800}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .footer-group nav{display:grid;gap:2px}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .footer-group a,html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .landing-footer-bottom a{display:flex;align-items:center;min-height:44px;padding:0;color:var(--landing-muted);font-size:13px;text-decoration:none;transition:color 180ms,translate 180ms}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .footer-group a:hover{color:var(--landing-teal);translate:-3px 0}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .landing-footer-bottom{display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-inline:auto;border-top:1px solid #2b6b7c44;padding-block:22px 28px;font-size:12px;color:var(--landing-muted)}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .landing-footer-bottom nav{display:flex;gap:24px;flex-wrap:wrap}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .landing-footer-bottom a{font-size:12px}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .landing-footer-bottom a:hover{color:var(--landing-teal)}
+.site-chrome .footer-unavailable{display:flex;align-items:center;min-height:44px;font-size:13px;color:var(--landing-muted);cursor:default}
+.site-chrome .footer-social{display:flex;align-items:center;gap:12px;margin-top:20px}
+.site-chrome .footer-social>span{display:grid;place-items:center;width:38px;height:38px;border:1px solid var(--landing-line);border-radius:50%;color:var(--landing-muted)}
+.site-chrome .footer-social>span:hover{color:var(--landing-teal);border-color:var(--landing-teal)}
+html body.nesharo-site:not(.landing-mode) :is(.section,.section.soft,.section.light,.page-hero,.form-page){background:transparent;color:var(--landing-text);border-color:var(--landing-line)}
+html body.nesharo-site:not(.landing-mode) .page-hero{padding-block:var(--site-space-5);border-bottom:1px solid var(--landing-line)}
+html body.nesharo-site:not(.landing-mode) :is(.page-hero p,.section-subtitle,.section-heading p,.pricing-note,.feature-card p,.step-card p,.legal-copy p,.legal-copy li){color:var(--landing-muted)}
+html body.nesharo-site:not(.landing-mode) :is(.auth-card,.panel,.white-card,.price-card,.feature-card,.contact-panel,.legal-copy,.insight-sheet,.faq-list details){background:var(--landing-card);border:1px solid var(--landing-line);border-radius:var(--site-radius);box-shadow:var(--site-shadow);color:var(--landing-text)}
+html body.nesharo-site:not(.landing-mode) .feature-card{padding:var(--site-space-4)}
+html body.nesharo-site:not(.landing-mode) .feature-card:hover{border-color:var(--landing-teal);transform:none}
+html body.nesharo-site:not(.landing-mode) .feature-icon{border-radius:50%;background:var(--landing-raised);color:var(--landing-teal)}
+html body.nesharo-site:not(.landing-mode) .price-card.featured{background:linear-gradient(145deg,var(--landing-raised),var(--landing-card));border-color:var(--landing-teal)}
+html body.nesharo-site:not(.landing-mode) :is(.price,.price-card h3,.insight-sheet strong,.faq-list summary){color:var(--landing-text)}
+html body.nesharo-site:not(.landing-mode) :is(.price-card p,.price-card li,.price-card small,.auth-card>p,.faq-list p){color:var(--landing-muted)}
+html body.nesharo-site:not(.landing-mode) :is(.pill,.notice,.tag,.insight-art){background:var(--landing-raised);color:var(--landing-muted);border-color:var(--landing-line)}
+html body.nesharo-site:not(.landing-mode) .faq-list details{padding:8px var(--site-space-3);margin-bottom:12px}
+html body.nesharo-site:not(.landing-mode) .faq-list summary{font-size:17px}
+html body.nesharo-site:not(.landing-mode) .cta-block{background:linear-gradient(125deg,var(--landing-raised),var(--landing-card));border:1px solid var(--landing-line);border-radius:var(--site-radius);color:var(--landing-text)}
+html body.nesharo-site:not(.landing-mode) .cta-block p{color:var(--landing-muted)}
+html body.nesharo-site:not(.landing-mode) .auth-card{max-width:500px;padding:var(--site-space-4)}
+html body.nesharo-site:not(.landing-mode) .auth-bottom{color:var(--landing-muted)}
+html body.nesharo-site:not(.landing-mode) :is(.auth-bottom a,.inline-link,.more,.page-back){color:var(--landing-teal)}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) :is(input:not([type=radio]):not([type=checkbox]),textarea,select){background:var(--landing-bg);color:var(--landing-text);border:1px solid var(--landing-line);border-radius:var(--site-radius-small);font:inherit;max-width:100%;min-width:0;padding:12px 14px}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) input:not([type=radio]):not([type=checkbox]),html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) select{min-height:48px}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) :is(input,textarea)::placeholder{color:var(--landing-muted);opacity:.8}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) :is(input[type=radio],input[type=checkbox]){accent-color:var(--landing-teal);width:18px;height:18px;min-height:18px;flex-shrink:0}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) :is(.field label,.question-card,.field>label small){color:var(--landing-text)}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) :is(.btn-dark,.btn-accent,.button:not(.secondary)):not(:disabled),html body.assessment-mode :is(main button,dialog button){background:var(--landing-primary-bg);color:var(--landing-primary-fg);border:1px solid transparent;border-radius:999px;min-height:48px;font-weight:700;box-shadow:0 6px 24px #28d9d415}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) :is(.btn-dark,.btn-accent,.button:not(.secondary)):not(:disabled):hover,html body.assessment-mode :is(main button,dialog button):hover{background:var(--landing-primary-hover);color:var(--landing-primary-fg);filter:none}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) :is(.btn-outline,.button.secondary,.btn-light),html body.assessment-mode :is(main button.secondary,main button[data-action=previous],main button[data-action=home],main button[data-action=later]){background:var(--landing-secondary-bg);color:var(--landing-secondary-fg);border:1px solid var(--landing-line);border-radius:999px;min-height:48px;box-shadow:none}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) :is(.btn-outline,.button.secondary,.btn-light):hover{background:var(--landing-raised);color:var(--landing-secondary-fg);border-color:var(--landing-teal)}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) :is(button,.button,.btn):active:not(:disabled){translate:0 1px}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) :is(.logout-button,.button.danger,button.danger):not(:disabled){background:var(--site-danger-bg);color:var(--site-danger-fg);border:1px solid var(--site-danger-line)}
+html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) :is(button,.btn,.button):is(:disabled,[aria-disabled=true]){background:var(--landing-disabled-bg);color:var(--landing-disabled-fg);border-color:var(--landing-line);opacity:1;box-shadow:none;translate:none;cursor:not-allowed;filter:none}
+html body:is(.account-mode,.workspace-mode) :is(.card,.sidebar-person,.account-sidebar,.sidebar,.day){background:var(--landing-card);color:var(--landing-text);border-color:var(--landing-line);border-radius:var(--site-radius);box-shadow:none}
+html body:is(.account-mode,.workspace-mode) :is(.card p,.field-help,.help,.section-heading-row p,.empty p,.review-row span){color:var(--landing-muted)}
+html body.account-mode .account-grid .identity-card{background:var(--landing-card);border-color:var(--landing-line);border-radius:var(--site-radius)}
+html body.account-mode .account-sidebar{top:var(--site-header-height);height:calc(100dvh - var(--site-header-height));border-radius:0}
+html body.account-mode .account-layout{min-height:calc(100dvh - var(--site-header-height))}
+html body.account-mode :is(.account-topbar,.page-heading,.security-line,.form-section,.form-footer){border-color:var(--landing-line)}
+html body.account-mode .form-footer{background:var(--landing-card)}
+html body.account-mode .account-nav a{color:var(--landing-muted);border-radius:var(--site-radius-small)}
+html body.account-mode .account-nav a[aria-current=page]{background:var(--landing-raised);color:var(--landing-teal);border-color:var(--landing-line)}
+html body.account-mode :is(.badge,.avatar,.card-icon,.completion-card,.session-notice){background:var(--landing-raised);color:var(--landing-teal);border-color:var(--landing-line)}
+html body.account-mode .product-head img{background:transparent;border:0;object-fit:contain;width:80px;height:48px}
+html body.account-mode .account-product-zone .product-card{border-color:var(--landing-line)}
+html body.account-mode .account-edit-guide a{color:var(--landing-teal)}
+html body.workspace-mode .sidebar{inset-block-start:var(--site-header-height);height:calc(100dvh - var(--site-header-height));border-radius:0}
+html body.workspace-mode :is(.topbar,.workspace-heading,.roadmap ol,.roadmap li a,.review-row,.section-title){border-color:var(--landing-line)}
+html body.workspace-mode .main-nav a,html body.workspace-mode .sidebar-bottom a{color:var(--landing-muted)}
+html body.workspace-mode .main-nav a.active{background:var(--landing-raised);color:var(--landing-teal)}
+html body.workspace-mode :is(.tag,.notice,.section-status-list button,.draft-text,.pillar-card,.source-map){background:var(--landing-raised);color:var(--landing-muted);border-color:var(--landing-line)}
+html body.workspace-mode .section-status-list button.approved{background:var(--landing-teal);color:var(--landing-primary-fg)}
+html body.workspace-mode :is(.command-hero,.hero){background:linear-gradient(125deg,var(--landing-raised),var(--landing-card));border:1px solid var(--landing-line);border-radius:var(--site-radius);padding:var(--site-space-4)}
+html body.workspace-mode :is(.ai-output,.voice-summary,.identity-overview,.plan-card.selected){background:var(--landing-card);border-color:var(--landing-teal)}
+html body.workspace-mode .plan-card{border-radius:var(--site-radius)}
+html body.workspace-mode .plan-price{background:var(--landing-bg);color:var(--landing-muted);border-radius:var(--site-radius-small)}
+html body.workspace-mode :is(.ai-status.error,.field-error,.identity-error){color:var(--site-danger-fg)}
+html body.workspace-mode .ai-status.error{background:var(--site-danger-bg)}
+html body.workspace-mode .ai-setup{background:var(--landing-raised);border-color:var(--landing-line)}
+html body.workspace-mode .tag.warn{background:var(--site-warning-bg);color:var(--site-warning-fg)}
+html body.assessment-mode :is(main section,main .card,dialog){background:var(--landing-card);color:var(--landing-text);border-color:var(--landing-line);border-radius:var(--site-radius)}
+html body.assessment-mode :is(.assessment-intro,.result-hero,.lead-card){background:linear-gradient(125deg,var(--landing-raised),var(--landing-card));border-color:var(--landing-line)}
+html body.assessment-mode main .choice{background:var(--landing-bg);color:var(--landing-text);border-color:var(--landing-line)}
+html body.assessment-mode main .choice:has(input:checked){background:var(--landing-raised);border-color:var(--landing-teal)}
+html body.assessment-mode :is(.stage-progress,.step-navigation span){background:var(--landing-bg);color:var(--landing-muted);border-color:var(--landing-line)}
+html body.assessment-mode .step-navigation [aria-current=step]{background:var(--landing-teal);color:var(--landing-primary-fg)}
+html body.assessment-mode :is(.form-error,.field-error,#feedback.error){color:var(--site-danger-fg)}
+html body:is(.account-mode,.nesharo-site,.assessment-mode) .save-message.success{color:var(--site-success-fg)}
+html body:is(.account-mode,.nesharo-site,.assessment-mode) :is(.save-message.error,.field-error,.form-feedback.error){color:var(--site-danger-fg)}
+html body.nesharo-site .not-found{background:var(--landing-card);color:var(--landing-text);border:1px solid var(--landing-line);border-radius:var(--site-radius);padding:var(--site-space-5);max-width:840px;margin:var(--site-space-5) auto}
+html body.nesharo-site .not-found h1{color:var(--landing-text);font-size:clamp(28px,4vw,42px)}
+@media(max-width:1100px){
+  html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .header-inner{gap:16px}
+  html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .site-nav{gap:14px}
+  html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .site-nav>a{font-size:12px}
+}
+@media(min-width:901px){html body.workspace-mode>.site-footer{margin-inline-start:272px}}
+@media(min-width:901px) and (max-width:1100px){html body.workspace-mode>.site-footer{margin-inline-start:254px}}
+@media(max-width:1000px){
+  html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .site-nav{position:absolute;inset:100% 0 auto;display:flex;flex-direction:column;align-items:stretch;background:#071c2dfc;border-bottom:1px solid var(--landing-line);padding:16px 24px;margin:0;gap:4px;opacity:0;visibility:hidden;pointer-events:none;transform:translateY(-8px);max-height:75dvh;overflow-y:auto;transition:opacity 180ms,transform 180ms,visibility 180ms}
+  html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .site-nav.open{opacity:1;visibility:visible;pointer-events:auto;transform:none}
+  html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .site-nav>a{font-size:14px;padding:10px 12px;min-height:48px}
+  html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .site-nav>a.active:after{inset:8px 0 8px auto;width:2px;height:auto}
+  html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .menu-toggle{display:grid}
+  html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .header-actions{margin-inline-start:auto}
+}
+@media(max-width:900px){
+  html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .container{width:calc(100% - 48px)}
+  html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .footer-main{grid-template-columns:repeat(2,minmax(0,1fr));gap:32px}
+  html body.account-mode .account-sidebar{top:0;height:100dvh;border-radius:0;z-index:45}
+  html body.account-mode .menu-backdrop{z-index:44}
+  html body.workspace-mode .site-footer{padding-bottom:80px}
+  html body:is(.nesharo-site,.workspace-mode,.account-mode) :is(.form-grid,.form-columns){grid-template-columns:1fr}
+}
+@media(max-width:600px){
+  :root{--site-header-height:74px}
+  html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .container{width:calc(100% - 32px)}
+  html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .header-inner{min-height:var(--site-header-height);gap:10px}
+  html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .ribbon-wordmark{width:48px;height:34px}
+  html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .logo{font-size:20px;gap:2px}
+  html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .landing-login{font-size:12px;padding:8px 14px;gap:8px}
+  html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .footer-main{grid-template-columns:1fr;gap:28px;padding-block:32px}
+  html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .landing-footer-bottom{display:block;text-align:center}
+  html body:is(.nesharo-site,.account-mode,.workspace-mode,.assessment-mode) .site-chrome .landing-footer-bottom nav{justify-content:center;gap:20px;margin-top:8px}
+  html body.nesharo-site:not(.landing-mode) :is(.pricing-grid,.feature-grid,.steps,.about-grid,.split){grid-template-columns:minmax(0,1fr)}
+  html body.nesharo-site:not(.landing-mode) :is(.price-card,.auth-card,.legal-copy,.panel){padding:var(--site-space-3)}
+  html body.nesharo-site:not(.landing-mode) .page-intro{gap:var(--site-space-2)}
+  html body.nesharo-site .not-found{padding:var(--site-space-3);margin:var(--site-space-3) 16px}
+  html body.nesharo-site .price{overflow-wrap:anywhere}
+  html body.workspace-mode .command-hero,html body.workspace-mode .hero{padding:var(--site-space-3)}
+}
+@media(prefers-reduced-motion:reduce){.site-chrome *,.site-chrome:before{transition:none!important;animation:none!important}}

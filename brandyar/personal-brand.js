@@ -7,7 +7,6 @@
   function updateThemeButton(){const dark=document.documentElement?.dataset.theme==='dark',toggle=$('theme-toggle');if(toggle){toggle.setAttribute?.('aria-pressed',String(dark));toggle.setAttribute?.('aria-label',dark?'فعال‌کردن حالت روشن':'فعال‌کردن حالت تاریک');const icon=toggle.querySelector?.('use');icon?.setAttribute('href',dark?'#sun':'#moon');}}
   updateThemeButton();
   $('theme-toggle')?.addEventListener('click',()=>{const theme=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=theme;try{localStorage.setItem('brandyar-theme',theme);}catch{}updateThemeButton();});
-  $('menu-toggle')?.addEventListener('click',()=>{const open=$('site-nav').classList.toggle('open');$('menu-toggle').setAttribute('aria-expanded',String(open));});
   if($('footer-year'))$('footer-year').textContent=new Intl.DateTimeFormat('fa-IR',{year:'numeric'}).format(new Date());
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const n = value => new Intl.NumberFormat('fa-IR').format(value);
