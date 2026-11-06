@@ -25,7 +25,12 @@ assert.equal(initialHero, externalHome);
 assert.match(externalHome, /class="landing-hero"/);
 assert.match(externalHome, /class="landing-dashboard-card"/);
 assert.match(externalHome, /class="landing-feature-grid"/);
-assert.match(externalHome, /علیرضا رضایی/);
+assert.doesNotMatch(externalHome,/علیرضا|testimonial|blockquote|testimonial-dots/);
+assert.match(externalHome,/مسیر برند شخصی‌ات را شروع کن/);
+assert.match(html,/aria-label="پیوندهای شرکت"/);
+assert.match(html,/aria-label="پیوندهای تکمیلی"/);
+assert.match(html,/class="footer-unavailable" aria-disabled="true">وبلاگ/);
+assert.equal((externalHome.match(/data-count-target=/g)||[]).length,4);
 assert.match(externalHome, /class="landing-cta-card"/);
 assert.match(externalHome, /href="\/personal-brand"/);
 const mobileTools = read('brandyar.html').split('<details id="workspace-tools"')[1].split('</details>')[0];
@@ -67,6 +72,8 @@ for (const foreground of ['text','muted','secondary-fg']) {
   const values=[luminance(landingTokens[foreground]),luminance(landingTokens.card)].sort((a,b)=>b-a);
   assert.ok((values[0]+.05)/(values[1]+.05)>=4.5,'Landing text contrast');
 }
+const disabledContrast=[luminance(landingTokens['disabled-fg']),luminance(landingTokens['disabled-bg'])].sort((a,b)=>b-a);
+assert.ok((disabledContrast[0]+.05)/(disabledContrast[1]+.05)>=4.5,'Landing disabled button contrast');
 for (const section of ['landing-hero','landing-preview','landing-features','landing-proof']) assert.ok(externalHome.includes(section));
 assert.equal((externalHome.match(/class="dashboard-stat"/g)||[]).length,3);
 assert.match(externalHome,/اعتبار برند/);
@@ -119,4 +126,60 @@ for (const observerAvailable of [true,false]) {
 }
 assert.match(read('typography.css'),/\.motion-item\s*\{\s*opacity:\s*1;/);
 assert.match(landingCSS,/:is\(\.landing-hero,\.landing-copy,\.landing-ribbon-visual,\.landing-ribbon\)\{opacity:1;visibility:visible;animation:none\}/);
-console.log('PASS: landing templates, contrast and persistent hero visibility with or without reveal observers (no browser)');
+const landingMotionBlock=source=>source.slice(source.indexOf('let landingDashboardPlayed='),source.indexOf('let motionObserver;'));
+assert.equal(landingMotionBlock(html),landingMotionBlock(read('app.js')));
+function landingHarness({reduced=false,observerAvailable=true}={}) {
+  const classNode=()=>{
+    const classes=new Set();
+    return {classes,classList:{add:value=>classes.add(value),remove:value=>classes.delete(value),toggle:(value,on)=>on?classes.add(value):classes.delete(value)}};
+  };
+  const hero=classNode(),stage=classNode(),cta=classNode();
+  const finals=['۸۷٪','↑٪۷۴','۱۲.۵K','۹.۸٪'];
+  const counters=[87,74,12.5,9.8].map((target,i)=>({textContent:finals[i],dataset:{countTarget:String(target),countDecimals:i<2?'0':'1',countPrefix:i===1?'↑٪':'',countSuffix:i===2?'K':i===1?'':'٪'}}));
+  const properties=new Map(),ring={style:{setProperty:(key,value)=>properties.set(key,value),removeProperty:key=>properties.delete(key)}};
+  stage.querySelectorAll=()=>counters;stage.querySelector=()=>ring;
+  const frames=new Map(),observers=[],listeners=new Map();let nextFrame=0;
+  class Observer {
+    constructor(callback){this.callback=callback;this.targets=new Set();this.disconnected=false;observers.push(this);}
+    observe(node){this.targets.add(node);}
+    unobserve(node){this.targets.delete(node);}
+    disconnect(){this.disconnected=true;this.targets.clear();}
+  }
+  const media={matches:reduced,addEventListener:(key,fn)=>listeners.set('media-'+key,fn),removeEventListener:key=>listeners.delete('media-'+key)};
+  const document={hidden:false,querySelector:selector=>({'.landing-hero':hero,'.landing-preview-stage':stage,'.landing-proof':cta}[selector]),addEventListener:(key,fn)=>listeners.set(key,fn),removeEventListener:key=>listeners.delete(key)};
+  const context=vm.createContext({document,window:{matchMedia:()=>media,...(observerAvailable?{IntersectionObserver:Observer}:{})},IntersectionObserver:Observer,requestAnimationFrame:fn=>{frames.set(++nextFrame,fn);return nextFrame;},cancelAnimationFrame:id=>frames.delete(id)});
+  vm.runInContext(landingMotionBlock(read('app.js'))+';setupLandingMotion();',context);
+  const run=code=>vm.runInContext(code,context);
+  const advance=time=>{const pending=[...frames.values()];frames.clear();pending.forEach(fn=>fn(time));};
+  return {context,hero,stage,cta,counters,finals,properties,frames,observers,media,document,listeners,run,advance};
+}
+for(const settings of [{reduced:true},{observerAvailable:false}]) {
+  const test=landingHarness(settings);
+  assert.equal(test.frames.size,0);assert.equal(test.observers.length,0);
+  assert.deepEqual(test.counters.map(node=>node.textContent),test.finals);
+}
+const animated=landingHarness(),observer=animated.observers[0];
+assert.equal(animated.frames.size,0);
+observer.callback([{target:animated.stage,isIntersecting:false}]);
+assert.equal(animated.frames.size,0);
+observer.callback([{target:animated.stage,isIntersecting:true}]);
+assert.ok(animated.stage.classes.has('landing-dashboard-animate'));
+assert.ok(!observer.targets.has(animated.stage));
+animated.advance(0);assert.equal(Number(animated.properties.get('--ring-progress')),0);
+animated.advance(450);assert.ok(Number(animated.properties.get('--ring-progress'))>0&&Number(animated.properties.get('--ring-progress'))<87);
+animated.advance(1260);assert.deepEqual(animated.counters.map(node=>node.textContent),animated.finals);
+assert.equal(animated.frames.size,0);assert.ok(!animated.properties.has('--ring-progress'));
+observer.callback([{target:animated.stage,isIntersecting:true}]);assert.equal(animated.frames.size,0);
+observer.callback([{target:animated.cta,isIntersecting:true}]);assert.ok(animated.cta.classes.has('landing-cta-animate'));
+observer.callback([{target:animated.hero,isIntersecting:false}]);assert.ok(animated.hero.classes.has('landing-motion-paused'));
+observer.callback([{target:animated.hero,isIntersecting:true}]);assert.ok(!animated.hero.classes.has('landing-motion-paused'));
+animated.document.hidden=true;animated.listeners.get('visibilitychange')();assert.ok(animated.hero.classes.has('landing-document-paused'));
+animated.run('setupLandingMotion()');assert.ok(!animated.observers.at(-1).targets.has(animated.stage));
+const interrupted=landingHarness();
+interrupted.observers[0].callback([{target:interrupted.stage,isIntersecting:true}]);interrupted.advance(0);interrupted.advance(300);
+interrupted.media.matches=true;interrupted.listeners.get('media-change')();
+assert.equal(interrupted.frames.size,0);assert.deepEqual(interrupted.counters.map(node=>node.textContent),interrupted.finals);
+assert.ok(interrupted.observers[0].disconnected);
+const cleanup=landingHarness();cleanup.observers[0].callback([{target:cleanup.stage,isIntersecting:true}]);cleanup.advance(0);cleanup.run('landingMotionCleanup()');
+assert.equal(cleanup.frames.size,0);assert.equal(cleanup.listeners.size,0);assert.deepEqual(cleanup.counters.map(node=>node.textContent),cleanup.finals);
+console.log('PASS: landing parity, visible hero, counter timing, one-shot reveal, reduced motion, cleanup, contrast and routes (no browser)');
