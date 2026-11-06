@@ -54,9 +54,9 @@ html body.nesharo-site.landing-mode .landing-btn-primary:hover{background:var(--
 html body.nesharo-site.landing-mode .landing-btn-primary:active{background:var(--landing-primary-bg);color:var(--landing-primary-fg);translate:0 1px}
 html body.nesharo-site.landing-mode .landing-btn-ghost{background:transparent;color:var(--landing-secondary-fg);padding-inline:8px}
 html body.nesharo-site.landing-mode .landing-btn-ghost:hover{background:#ffffff08;color:var(--landing-secondary-fg)}
-.landing-mode .landing-ribbon-visual{position:relative;isolation:isolate;min-width:0;display:grid;place-items:center;min-height:340px}
-.landing-mode .landing-ribbon-visual:before{content:'';position:absolute;inset:13% 12% 6%;z-index:-1;background:radial-gradient(ellipse,#0cf1d629,transparent 68%);filter:blur(18px)}
-.landing-mode .landing-ribbon{display:block;width:100%;height:auto;object-fit:contain;position:relative;z-index:1;filter:drop-shadow(0 20px 30px #00b9d21c)}
+.landing-mode .landing-ribbon-visual{position:relative;min-width:0;display:flex;align-items:center;justify-content:center;min-height:340px}
+.landing-mode .landing-ribbon-visual:before{content:'';position:absolute;inset:13% 12% 6%;z-index:0;background:radial-gradient(ellipse,#0cf1d629,transparent 68%);pointer-events:none}
+.landing-mode .landing-ribbon{display:block;width:100%;height:auto;aspect-ratio:2/1;object-fit:contain;position:relative;z-index:1;filter:none;transform:none}
 .landing-mode .landing-orbit{position:absolute;width:96%;height:43%;border:1px solid #18d5dd24;border-radius:50%;z-index:-1;pointer-events:none;transform:rotate(-18deg)}
 .landing-mode .orbit-two{width:84%;height:78%;border-color:#256ae733;transform:rotate(31deg)}
 .landing-mode .landing-light-dot{position:absolute;right:8%;top:22%;width:5px;height:5px;background:#b8fff6;border-radius:50%;box-shadow:0 0 16px 3px #43efdd80}
