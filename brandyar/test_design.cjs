@@ -57,4 +57,27 @@ for (const [background,foreground] of [['#245444','#fffdf8'],['#183e32','#fffdf8
   const values=[luminance(background),luminance(foreground)].sort((a,b)=>b-a);
   assert.ok((values[0]+.05)/(values[1]+.05)>=4.5, `Button contrast ${background}/${foreground}`);
 }
-console.log('PASS: final stylesheet order, hero/template parity, navigation contracts, mobile rules and light/dark token contrast (no browser)');
+const landingCSS = read('landing-reference.css');
+const landingTokens = Object.fromEntries([...landingCSS.matchAll(/--landing-([\w-]+):\s*(#[\da-f]{6})(?=;|\})/g)].map(match => [match[1],match[2]]));
+for (const background of ['#46ecd6','#55b8f3','#8af5e5','#8ed4ff']) {
+  const values=[luminance(background),luminance(landingTokens['primary-fg'])].sort((a,b)=>b-a);
+  assert.ok((values[0]+.05)/(values[1]+.05)>=4.5,'Landing gradient contrast');
+}
+for (const foreground of ['text','muted','secondary-fg']) {
+  const values=[luminance(landingTokens[foreground]),luminance(landingTokens.card)].sort((a,b)=>b-a);
+  assert.ok((values[0]+.05)/(values[1]+.05)>=4.5,'Landing text contrast');
+}
+for (const section of ['landing-hero','landing-preview','landing-features','landing-proof']) assert.ok(externalHome.includes(section));
+assert.equal((externalHome.match(/class="dashboard-stat"/g)||[]).length,3);
+assert.match(externalHome,/اعتبار برند/);
+assert.match(externalHome,/data-home-section="landing-preview"/);
+assert.match(externalHome,/href="\/brandyar\/dashboard"/);
+assert.doesNotMatch(externalHome,/class="landing-n"|class="cta-orb"|src="\/logo.jpg"|href="#\/app"/);
+assert.match(html,/class="landing-login"/);
+assert.match(html,/href="\/account" class="landing-login"/);
+assert.ok((html.match(/src="\/landing-logo.png"/g)||[]).length>=5);
+assert.equal(require('node:crypto').createHash('sha256').update(fs.readFileSync(`${__dirname}/landing-logo.png`)).digest('hex'),'ac1f2dc4676946533da67611013f2a8f83c7ce708f9cd91857454881324ae923');
+for (const match of externalHome.matchAll(/<use href="#([^"]+)"/g)) assert.ok(html.includes(`id="${match[1]}"`),`Missing SVG ${match[1]}`);
+assert.match(landingCSS,/\.dashboard-stats\{grid-template-columns:1fr/);
+assert.match(landingCSS,/\.landing-ribbon-visual\{grid-row:1/);
+console.log('PASS: templates, supplied asset integrity, SVG references, mobile contracts and landing/button contrast (no browser)');
