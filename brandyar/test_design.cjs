@@ -80,4 +80,32 @@ assert.equal(require('node:crypto').createHash('sha256').update(fs.readFileSync(
 for (const match of externalHome.matchAll(/<use href="#([^"]+)"/g)) assert.ok(html.includes(`id="${match[1]}"`),`Missing SVG ${match[1]}`);
 assert.match(landingCSS,/\.dashboard-stats\{grid-template-columns:1fr/);
 assert.match(landingCSS,/\.landing-ribbon-visual\{grid-row:1/);
-console.log('PASS: templates, supplied asset integrity, SVG references, mobile contracts and landing/button contrast (no browser)');
+const motionBlock = source => source.slice(source.indexOf('let motionObserver;'), source.indexOf('const assessmentQuestions ='));
+assert.equal(motionBlock(html),motionBlock(read('app.js')));
+function motionNode(hero=false) {
+  const classes=new Set();
+  return {classes,classList:{add:name=>classes.add(name)},closest:selector=>hero&&selector==='.landing-hero'?{}:null,style:{setProperty(){}}};
+}
+for (const observerAvailable of [true,false]) {
+  const hero=motionNode(true),section=motionNode();
+  let callback,observed=[];
+  class Observer {
+    constructor(fn){callback=fn;}
+    observe(node){observed.push(node);}
+    unobserve(){}
+    disconnect(){}
+  }
+  const context=vm.createContext({window:{matchMedia:()=>({matches:false}),...(observerAvailable?{IntersectionObserver:Observer}:{})},IntersectionObserver:Observer,document:{querySelectorAll:()=>[hero,section]}});
+  vm.runInContext(motionBlock(read('app.js'))+';setupMotion();',context);
+  assert.equal(hero.classes.size,0,'Hero must not enter the reveal lifecycle');
+  if(observerAvailable) {
+    assert.deepEqual(observed,[section]);
+    callback([{target:section,isIntersecting:true}]);
+    callback([{target:section,isIntersecting:false}]);
+  }
+  assert.ok(section.classes.has('is-visible'));
+  assert.equal(hero.classes.size,0);
+}
+assert.match(read('typography.css'),/\.motion-item\s*\{\s*opacity:\s*1;/);
+assert.match(landingCSS,/:is\(\.landing-hero,\.landing-copy,\.landing-ribbon-visual,\.landing-ribbon\)\{opacity:1;visibility:visible;animation:none\}/);
+console.log('PASS: landing templates, contrast and persistent hero visibility with or without reveal observers (no browser)');

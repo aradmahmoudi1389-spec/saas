@@ -38,6 +38,7 @@ html body.nesharo-site.landing-mode .landing-login{display:inline-flex;align-ite
 .landing-mode .landing-login svg{width:18px;height:18px}
 html body.nesharo-site.landing-mode .menu-toggle{background:var(--landing-card);color:var(--landing-text);border:1px solid var(--landing-line);border-radius:10px}
 .landing-mode .landing-hero{position:relative;isolation:isolate;padding:76px 0 84px}
+.landing-mode :is(.landing-hero,.landing-copy,.landing-ribbon-visual,.landing-ribbon){opacity:1;visibility:visible;animation:none}
 .landing-mode .landing-hero:before{content:'';position:absolute;inset:0;z-index:-1;background:radial-gradient(ellipse at 20% 55%,#15d6bf18,transparent 50%);pointer-events:none}
 .landing-mode .landing-hero-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:40px;align-items:center}
 .landing-mode .landing-copy{min-width:0;position:relative;z-index:2}
