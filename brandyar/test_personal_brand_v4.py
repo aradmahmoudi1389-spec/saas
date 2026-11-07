@@ -161,7 +161,9 @@ class VersionFourHTTPTests(BaseHTTP):
         loaded = self.call(path='/api/personal-brand?id=' + identity, cookie=cookie)[1]['data']
         self.assertTrue(loaded['report_unlocked'])
         self.assertEqual(len(loaded['reports'][0]['body']['dimensions']), 5)
-        self.assertNotIn('phone', json.dumps(loaded))
+        self.assertNotIn('phone', json.dumps(loaded['answers']))
+        self.assertNotIn('phone', json.dumps(loaded['reports']))
+        self.assertEqual(loaded['report_flow'], {'phoneRegistered': False, 'savedPhoneMasked': None})
         with __import__('server').connect() as db:
             self.assertEqual(db.execute('SELECT count(*) FROM pb_leads WHERE assessment_id=?', (identity,)).fetchone()[0], 0)
             records = db.execute('SELECT * FROM pb_response_records WHERE assessment_id=?', (identity,)).fetchall()

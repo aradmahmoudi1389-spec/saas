@@ -1,0 +1,17 @@
+{
+  "enabled": false,
+  "plan_id": null,
+  "base_price": null,
+  "currency": null,
+  "billing_period": null,
+  "discount": {
+    "kind": null,
+    "value": null,
+    "valid_from": null,
+    "valid_until": null,
+    "max_uses": null,
+    "max_uses_per_owner": null,
+    "requires_full_report": true
+  },
+  "checkout_enabled": false
+}

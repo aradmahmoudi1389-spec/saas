@@ -128,4 +128,19 @@ dialog::backdrop { background: #10211b99; }
   .step-navigation span { padding: 5px 9px; font-size: 12px; }
 }
 .brandiyar-invite{background:linear-gradient(135deg,#edf7ef,#fff);border:1px solid #cfe3d5!important}.brandiyar-invite h2{font-size:22px!important;margin:8px 0}.brandiyar-invite p{color:var(--pb-muted)}
+.report-next{border-top:3px solid var(--pb-primary)}
+.report-next form{max-width:600px;margin-top:24px;padding-top:24px;border-top:1px solid var(--pb-line)}
+.report-next .text-link{display:inline-flex;align-items:center;min-height:44px;margin-inline-start:16px;color:var(--pb-primary)}
+.full-report>header{margin-block:28px}
+.full-report-nav{display:flex;flex-wrap:wrap;gap:8px;padding-block:12px;border-block:1px solid var(--pb-line)}
+.full-report-nav button{background:var(--pb-card);color:var(--pb-ink);border:1px solid var(--pb-line);font-size:13px}
+.full-report section{scroll-margin-top:110px}
+.report-dimension{border-bottom:1px solid var(--pb-line);padding-block:24px}
+.report-dimension:last-child{border-bottom:0}
+.report-dimension h4{color:var(--pb-primary);margin-block:20px 8px;font-size:15px}
+.full-report dt{font-weight:700;color:var(--pb-ink)}
+.full-report dd{color:var(--pb-muted);margin-inline-start:0;padding-bottom:12px}
+.full-report li{padding-block:8px}
+.full-report .report-product-offer{border-top:3px solid var(--pb-primary);margin-top:36px}
+@media(max-width:600px){.report-next .text-link{margin-inline-start:0;display:flex}.full-report-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.full-report dl{display:block}.full-report-nav button{font-size:12px;padding:10px}}
 @media(prefers-reduced-motion:reduce) { * { scroll-behavior: auto !important; animation: none !important; transition: none !important; } }

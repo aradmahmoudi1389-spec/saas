@@ -16,6 +16,7 @@
   const endpoint = admin ? '/api/admin/personal-brand' : '/api/personal-brand';
   let bootstrap, current, step = 1, csrf, started = Date.now(), busy = false, skipping = false;
   let adminQuery = {};
+  let fullReport=null,reportOffer=null,phoneFormOpen=false,editingReportPhone=false,reportLoading=false,reportError='';
   const dimensionTitle = key => ({identity:'وضوح هویت حرفه‌ای',position:'جایگاه‌یابی و مخاطب',credibility:'اعتبار تخصصی',message:'پیام و لحن',digital:'اجرای دیجیتال',growth:'رشد و تمایز',clarity:'روشن‌بودن مسیر',introduction:'قابل‌فهم‌بودن معرفی',evidence:'اعتماد و شواهد',content:'هماهنگی محتوا',visibility:'استمرار و دیده‌شدن'})[key] || 'بُعد';
   let questionTimes = {}, focusedQuestion = null;
   function finishFocus(){if(focusedQuestion){const {key,time}=focusedQuestion;questionTimes[key]=Math.min((questionTimes[key]||0)+Date.now()-time,86400000);focusedQuestion=null;}}
@@ -76,10 +77,11 @@
     $('feedback').textContent='در حال آماده‌سازی ارزیابی…';
     bootstrap=await api(admin?'':'?action=bootstrap');csrf=bootstrap.csrf;
     if(!admin&&new URLSearchParams(location.search).get('instagram')==='connected'&&bootstrap.connection?.status==='connected'&&!bootstrap.connection.synced_at){try{await api('',{action:'sync'});bootstrap=await api('?action=bootstrap');}catch{}}
-    if(admin){paintAdmin();}else{home();}
+    if(admin){paintAdmin();}else{const requested=new URLSearchParams(location.hash?.slice(1)||'').get('assessment');if(requested&&bootstrap.assessments.some(item=>item.id===requested))await open(requested);else home();}
     $('feedback').textContent='';
   }
   function home() {
+    globalThis.history?.replaceState(null,'',location.pathname);
     current=null;
     const draft=bootstrap.assessments.find(r=>r.state==='draft'),done=bootstrap.assessments.find(r=>r.state==='completed');
     const outcome=new URLSearchParams(location.search).get('instagram');
@@ -135,10 +137,34 @@
     const ig=report.instagram;if(!ig)return '';
     return `<section><h2>هدفت و صفحه‌ای که دیده می‌شود</h2><p>هدف تو: ${esc(report.goal)}</p><p>معرفی صفحه: ${esc(ig.profile.biography||'متن معرفی در دسترس نبود.')}</p><p>بررسی ${n(ig.observations.sample_size)} محتوای دریافت‌شده در ${date(ig.synced_at)}</p><p>موضوع‌های تکرارشونده در هشتگ‌ها: ${ig.observations.hashtags.map(v=>esc(v[0])).join('، ')||'هشتگ تکرارشونده‌ای در این نمونه دیده نشد.'}</p><p>این موضوع‌ها چقدر همان چیزی را نشان می‌دهند که می‌خواهی با آن شناخته شوی؟ این داده‌ها به‌تنهایی هماهنگی معنایی یا کیفیت محتوا را تأیید نمی‌کنند.</p>${ig.synced_at<Date.now()/1000-86400?'<p>این تصویر مربوط به آخرین دریافت است و ممکن است صفحه‌ات بعد از آن تغییر کرده باشد.</p>':''}</section>`;
   }
+  function reportLocation(view){
+    globalThis.history?.replaceState(null,'','#assessment='+encodeURIComponent(current.assessment.id)+'&view='+view);
+  }
+  function reportFlowPanel(){
+    const flow=current?.report_flow||{};
+    const saved=flow.savedPhoneMasked&&!editingReportPhone;
+    const nextAction=reportLoading?'<button type="button" disabled>در حال آماده‌سازی…</button>':button('open_full_report','مشاهدهٔ گزارش کامل');
+    return `<section class="report-next"><h2>تصویر کامل‌تری از برندت ببین</h2><p>گزارش کامل را ببین و با نقاط قوت، زمینه‌های بهبود و قدم‌های بعدی برندت آشنا شو.</p>${phoneFormOpen&&!flow.phoneRegistered?`<form id="full-phone-form" novalidate><h3>دریافت گزارش کامل</h3><p class="help">برای ادامه، شمارهٔ موبایل باید در سرور برای همین نتیجه ثبت شود. این ثبت، تأیید مالکیت شماره یا رضایت پیامک تبلیغاتی نیست.</p>${saved?`<p>شمارهٔ ثبت‌شدهٔ همین حساب: <bdi>${esc(flow.savedPhoneMasked)}</bdi></p>${button('edit_report_phone','ویرایش شماره')}`:'<label for="full-report-phone">شمارهٔ موبایل</label><input id="full-report-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="32" required aria-describedby="full-phone-error" aria-invalid="false">'}<input type="hidden" name="use_saved_phone" value="${saved?'yes':'no'}"><p id="full-phone-error" class="form-error" role="alert"></p><button type="submit">ثبت شماره و مشاهدهٔ گزارش</button><a class="text-link" href="/#/privacy">سیاست حریم خصوصی</a></form>`:nextAction}${reportLoading?'<p role="status">در حال آماده‌سازی گزارش کامل…</p>':''}${reportError?`<p class="form-error" role="alert">${esc(reportError)}</p>${button('retry_full_report','تلاش دوباره')}`:''}</section>`;
+  }
+  function fullReportView(){
+    const report=fullReport;
+    const section=(id,title,body)=>`<section id="${id}"><h2>${title}</h2>${body}</section>`;
+    const paragraph=value=>`<p>${esc(value)}</p>`;
+    const nav=[['full-summary','جمع‌بندی'],['full-dimensions','ابعاد و شواهد'],['full-priorities','اولویت‌های اقدام'],['full-facts','اطلاعات زمینه‌ای'],['full-next','قدم بعدی'],['full-limits','محدودیت تحلیل']];
+    return `<article class="full-report"><header><span class="eyebrow">گزارش تکمیلی بر پایهٔ همین تست</span><h2>گزارش کامل برند شخصی</h2>${button('initial_report','بازگشت به نتیجهٔ اولیه')}</header><nav class="full-report-nav" aria-label="فهرست گزارش">${nav.map(([id,title])=>button('report_section',title,id)).join('')}</nav>${section('full-summary','جمع‌بندی وضعیت فعلی',paragraph(report.summary)+'<h3>نقاط قوت</h3>'+paragraph(report.strength)+'<h3>زمینهٔ قابل‌بهبود</h3>'+paragraph(report.improvement))}${section('full-dimensions','تحلیل ابعاد سنجیده‌شده',report.dimensions.map(d=>`<article class="report-dimension"><h3>${esc(d.title)}</h3><p>امتیاز ثبت‌شده در نتیجهٔ اولیه: ${n(d.score)} از ۱۰۰</p><h4>مشاهده بر پایهٔ پاسخ‌ها</h4>${paragraph(d.observation)}<dl>${d.evidence.map(e=>`<dt>${esc(e.question)}</dt><dd>${esc(e.answer)}</dd>`).join('')}</dl>${d.evidenceVaries?`<p>نمونهٔ رفتار با پاسخ بالاتر: ${esc(d.strongerBehavior)} — ${esc(d.strongerAnswer)}</p><p>رفتار برای مرور بیشتر: ${esc(d.reviewBehavior)} — ${esc(d.reviewAnswer)}</p>`:'<p>پاسخ‌های این بُعد هم‌سطح‌اند؛ رفتار قوی‌تر یا ضعیف‌تری از این پاسخ‌ها قابل‌تفکیک نیست.</p>'}<h4>پیشنهاد تفسیری و عملی</h4>${paragraph(d.suggestion)}</article>`).join(''))}${section('full-priorities','اولویت‌های اقدام',`<ol>${report.priorities.map(item=>`<li><h3>${esc(item.dimension)}</h3>${paragraph(item.observation)}${paragraph(item.action)}</li>`).join('')}</ol>`)}${section('full-facts','اطلاعات زمینه‌ای همین تست',`<dl>${report.facts.map(item=>`<dt>${esc(item.label)}</dt><dd>${esc(item.value)}</dd>`).join('')}</dl>`)}${section('full-next','قدم بعدی پیشنهادی',paragraph(report.nextStep)+paragraph(report.reflection))}${section('full-limits','محدودیت تحلیل',`<ul>${report.limitations.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>`)}<section class="report-product-offer"><h2>حالا تحلیل را به اقدام تبدیل کن</h2><p>در برندیـار می‌توانی هویت حرفه‌ای، راهنمای صدای برند و ستون‌های محتوایی‌ات را مشخص کنی و پیش‌نویس‌های محتوا را پیش از استفاده بررسی کنی.</p>${reportOffer?.hasAccess?'<a class="button" href="/brandyar/dashboard">ورود به محصول</a>':`${button('report_purchase_offer','مشاهدهٔ پیشنهاد خرید')}<p class="help">این گزارش به خرید وابسته نیست. در حال حاضر پیشنهاد تخفیف قابل‌خریدی برای این مسیر فعال نیست.</p>`}<p id="report-offer-error" class="form-error" role="alert"></p></section></article>`;
+  }
+  async function loadFullReport(){
+    reportLoading=true;reportError='';phoneFormOpen=false;paintReports();
+    try{
+      const result=await api('',{action:'full_report',id:current.assessment.id});
+      fullReport=result.report;reportOffer=result.offer;reportLocation('full');
+    }catch(error){reportError=error.message;}
+    finally{reportLoading=false;paintReports();}
+  }
   function reportView(report) {
     if(report.analysis_version==='monthly-behavior-v4'){
       try{localStorage.setItem('brandyar-test-completed','true')}catch{}
-      return `<section class="result-hero"><p>گزارش شخصی تو</p><h2>امتیاز کلی: ${n(report.total)} از ۱۰۰</h2><p>مرحلهٔ فعلی: ${esc(report.stage)}</p><p>${esc(report.summary)}</p></section><div class="grid">${report.dimensions.map(d=>`<article class="card"><h3>${esc(d.title)}</h3><progress max="100" value="${d.score}" aria-label="${esc(d.title)}"></progress><p>${n(d.score)} از ۱۰۰</p></article>`).join('')}</div><section><h2>نقطهٔ قوت</h2><p>${esc(report.strength)}</p><h2>فرصت رشد</h2><p>${esc(report.top_opportunity)}</p><h2>اقدام ابتدایی</h2><p>${esc(report.starter_action)}</p><h2>سؤال برای ادامه</h2><p>${esc(report.challenge_question)}</p><p class="muted">${esc(report.disclaimer)}</p></section><section class="brandiyar-invite"><span class="eyebrow">قدم بعدی، اختیاری</span><h2>می‌خواهی این شناخت را به یک مسیر قابل‌استفاده تبدیل کنی؟</h2><p>در فضای خصوصی برندیـار می‌توانی هویت حرفه‌ای‌ات را تکمیل و برای ساخت محتوای هماهنگ آماده کنی.</p><a class="button" href="/brandyar/plans">مشاهدهٔ تعرفه‌های برندیـار</a></section>`;
+      return `<section class="result-hero"><p>گزارش شخصی تو</p><h2>امتیاز کلی: ${n(report.total)} از ۱۰۰</h2><p>مرحلهٔ فعلی: ${esc(report.stage)}</p><p>${esc(report.summary)}</p></section><div class="grid">${report.dimensions.map(d=>`<article class="card"><h3>${esc(d.title)}</h3><progress max="100" value="${d.score}" aria-label="${esc(d.title)}"></progress><p>${n(d.score)} از ۱۰۰</p></article>`).join('')}</div><section><h2>نقطهٔ قوت</h2><p>${esc(report.strength)}</p><h2>فرصت رشد</h2><p>${esc(report.top_opportunity)}</p><h2>اقدام ابتدایی</h2><p>${esc(report.starter_action)}</p><h2>سؤال برای ادامه</h2><p>${esc(report.challenge_question)}</p><p class="muted">${esc(report.disclaimer)}</p></section>${admin?'':reportFlowPanel()}`;
     }
     if(report.top_opportunity){
       if(!current?.report_unlocked||!report.dimensions)return `<section class="result-hero"><p>نتیجهٔ اولیهٔ ارزیابی تو</p><h2>امتیاز فعلی پرسونال برندت: ${n(report.total)} از ۱۰۰</h2><p>مرحلهٔ فعلی: ${esc(report.stage)}</p><p>${esc(report.summary)}</p>${report.preview_opportunities?.length?`<p>فرصت‌های رشد: ${report.preview_opportunities.map(esc).join('، ')}</p>`:''}<p>این نتیجه یک تصویر کلی از وضعیت فعلی توست و قرار نیست ارزش یا توانایی‌ات را قضاوت کند.</p></section><section class="lead-card"><h2>گزارش کاملت آماده است</h2><p>شماره‌ات را وارد کن تا نتیجهٔ کامل، امتیاز بخش‌ها و تحلیل شخصی‌سازی‌شده‌ات را ببینی.</p><form id="lead-form"><label>شمارهٔ موبایل<input name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="24" aria-describedby="lead-error" required></label><label class="consent"><input name="consent" type="checkbox" required>با ذخیرهٔ شماره برای نمایش این گزارش موافقم.</label><p id="lead-error" class="form-error" role="alert"></p><button type="submit">مشاهدهٔ نتیجهٔ کامل</button></form><button type="button" data-action="later">بعداً وارد می‌کنم</button></section>`;
@@ -152,6 +178,7 @@
   }
   function comparison(first,second){return `<section><h2>مقایسهٔ دو نتیجه</h2><p>${first.template_version===second.template_version?'نسخهٔ تست یکسان است؛ تغییر نمره به‌تنهایی نشان‌دهندهٔ تغییر واقعی یا معناداری آماری نیست.':'نسخه‌های تست متفاوت‌اند؛ نمره‌ها ممکن است مستقیماً قابل مقایسه نباشند.'}</p>${first.dimensions.map(d=>`<p>${esc(d.title)}: ${n(d.score)} ← ${n(second.dimensions.find(v=>v.key===d.key)?.score)}</p>`).join('')}</section>`;}
   function paintReports(){
+    if(fullReport&&!admin){$('app').innerHTML=fullReportView();return;}
     const reports=current.reports;
     $('app').innerHTML=reports.length?reportView(reports[0].body):'<section><h2>گزارشی موجود نیست</h2><p>دادهٔ اینستاگرام یا گزارش قبلاً حذف شده است؛ برای تولید مجدد، ارزیابی تازه بسازید.</p></section>';
     if(reports.length>1&&reports[0].body.dimensions)$('app').insertAdjacentHTML('beforeend',`<section><h2>مقایسهٔ آخرین دو نسخه</h2>${reports[0].body.dimensions.map((d,i)=>`<p>${esc(d.title)}: ${n(reports[1].body.dimensions[i].score)} ← ${n(d.score)}</p>`).join('')}</section>`);
@@ -166,7 +193,7 @@
     if(data.permissions.private)$('app').insertAdjacentHTML('beforeend',`<section><h2>مقایسهٔ دو ارزیابی</h2><form id="compare-assessments"><label>شناسهٔ ارزیابی اول<input name="first" maxlength="36" required></label><label>شناسهٔ ارزیابی دوم<input name="second" maxlength="36" required></label><button>مقایسهٔ آخرین گزارش‌ها</button></form><div id="comparison"></div></section>`);
     if(!data.permissions.manage)$('privacy-form').replaceWith(Object.assign(document.createElement('p'),{textContent:'تغییر سیاست نگهداری فقط برای مدیر مجاز است.'}));
   }
-  async function open(id){skipping=false;questionTimes={};focusedQuestion=null;current=await api('?id='+encodeURIComponent(id));step=Math.min(current.assessment.stage+1,5);if(current.assessment.state==='completed'){paintReports();await api('',{action:'view_report',id});}else paintStep();}
+  async function open(id){skipping=false;questionTimes={};focusedQuestion=null;fullReport=null;reportError='';phoneFormOpen=false;editingReportPhone=false;current=await api('?id='+encodeURIComponent(id));step=Math.min(current.assessment.stage+1,5);if(current.assessment.state==='completed'){const requested=new URLSearchParams(location.hash?.slice(1)||'').get('view')==='full';reportLocation(requested?'full':'initial');phoneFormOpen=requested&&!current.report_flow?.phoneRegistered;paintReports();await api('',{action:'view_report',id});if(requested&&current.report_flow?.phoneRegistered)await loadFullReport();}else{reportLocation('initial');paintStep();}}
   document.addEventListener('input',event=>{
     if(event.target.id==='filter'){for(const row of document.querySelectorAll('[data-row]'))row.hidden=!row.textContent.includes(event.target.value);return;}
     const form=event.target.closest('#step-form');if(!form||!current)return;
@@ -186,6 +213,10 @@
       }else if(form.id==='expert-review'){
         const rubric=Object.fromEntries(['fit','clarity','nonjudgment','unambiguous','distinct'].map(key=>[key,Number(values[key])]));
         await api('',{action:'feedback',id:form.dataset.id,question_id:values.question_id,rubric,reason:values.reason,confirmed:true});await load();
+      }else if(form.id==='full-phone-form'){
+        const submit=form.querySelector('[type=submit]');submit.textContent='در حال ثبت شماره…';
+        try{await api('',{action:'unlock_report',id:current.assessment.id,phone:values.phone,use_saved_phone:values.use_saved_phone==='yes',consent:true});current=await api('?id='+encodeURIComponent(current.assessment.id));await loadFullReport();}
+        finally{submit.textContent='ثبت شماره و مشاهدهٔ گزارش';}
       }else if(form.id==='lead-form'){
         const values=Object.fromEntries(new FormData(form));
         await api('',{action:'unlock_report',id:current.assessment.id,phone:values.phone,consent:values.consent==='on'});
@@ -216,13 +247,19 @@
         if(await confirmAction('نسخهٔ پیش‌نویس مستقل ساخته می‌شود؛ نسخه‌های قبلی تغییر نمی‌کنند.')){await api('',{action:kind+'_draft',body,reason:values.reason,confirmed:true});await load();}else throw new Error('عملیات به انتخاب شما لغو شد.');
       }else if(form.id==='privacy-form'){if(!await confirmAction('سیاست نگهداری برای پاک‌سازی‌های بعدی اعمال می‌شود.'))throw new Error('عملیات به انتخاب شما لغو شد.');await api('',{action:'privacy',retention_days:Number(values.days),reason:values.reason,confirmed:true});await load();}
       $('feedback').textContent='پاسخ‌هایت ذخیره شد؛ هر وقت آماده بودی ادامه بده.';
-    }catch(error){if(form.id==='lead-form'){$('lead-error').textContent=error.message;form.querySelector?.('[name=phone]')?.setAttribute('aria-invalid','true');}else $('feedback').textContent=error.message;}finally{busy=false;for(const [button,disabled] of buttons)button.disabled=disabled;}
+    }catch(error){if(form.id==='full-phone-form'){$('full-phone-error').textContent=error.message;form.querySelector?.('[name=phone]')?.setAttribute('aria-invalid','true');}else if(form.id==='lead-form'){$('lead-error').textContent=error.message;form.querySelector?.('[name=phone]')?.setAttribute('aria-invalid','true');}else $('feedback').textContent=error.message;}finally{busy=false;for(const [button,disabled] of buttons)button.disabled=disabled;}
   });
   document.addEventListener('click',async event=>{
     const target=event.target.closest('[data-action]');if(!target||busy)return;busy=true;target.disabled=true;
     const action=target.dataset.action,id=target.dataset.id;
     try{
-      if(action==='start'){const row=await api('',{action});await open(row.id);}
+      if(action==='open_full_report'){await api('',{action:'report_flow_event',id:current.assessment.id,event:'full_report_selected'}).catch(()=>{});reportLocation('full');if(current.report_flow?.phoneRegistered)await loadFullReport();else{phoneFormOpen=true;paintReports();$('full-report-phone')?.focus();}}
+      else if(action==='edit_report_phone'){editingReportPhone=true;phoneFormOpen=true;paintReports();$('full-report-phone')?.focus();}
+      else if(action==='retry_full_report')await loadFullReport();
+      else if(action==='initial_report'){fullReport=null;reportLocation('initial');paintReports();}
+      else if(action==='report_section'){$(id)?.scrollIntoView({behavior:'auto',block:'start'});}
+      else if(action==='report_purchase_offer'){try{await api('',{action:'report_flow_event',id:current.assessment.id,event:'purchase_offer_selected'});location.assign('/brandyar/plans');}catch(error){$('report-offer-error').textContent=error.message;}}
+      else if(action==='start'){const row=await api('',{action});await open(row.id);}
       else if(action==='edit'){if(await confirmAction('یک ارزیابی تازه شروع می‌شود و نتیجهٔ قبلی‌ات حفظ می‌شود.')){const row=await api('',{action:'restart',id:current.assessment.id,confirmed:true});await open(row.id);}}
       else if(action==='open')await open(id);
       else if(action==='page_next'||action==='page_previous'){adminQuery.offset=Math.max(0,bootstrap.offset+(action==='page_next'?100:-100));bootstrap=await api('?'+new URLSearchParams(adminQuery));paintAdmin();}

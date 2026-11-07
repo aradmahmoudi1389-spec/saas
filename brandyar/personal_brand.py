@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 import secrets
 import sqlite3
 import time
@@ -10,6 +11,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 import admin_workspace
 import personal_brand_model as model
+import personal_brand_report as full_reports
 
 
 def now():
@@ -30,7 +32,7 @@ def dumps(value):
 
 def initialize(db):
     exists = db.execute("SELECT 1 FROM sqlite_master WHERE name='pb_schema_migrations'").fetchone()
-    if exists and db.execute('SELECT 1 FROM pb_schema_migrations WHERE version=4').fetchone() and db.execute("SELECT 1 FROM pb_template_versions WHERE id='pb-test-month-v4'").fetchone() and db.execute("SELECT 1 FROM pb_scoring_models WHERE id='pb-score-month-v4'").fetchone():
+    if exists and db.execute('SELECT 1 FROM pb_schema_migrations WHERE version=5').fetchone() and db.execute("SELECT 1 FROM pb_template_versions WHERE id='pb-test-month-v4'").fetchone() and db.execute("SELECT 1 FROM pb_scoring_models WHERE id='pb-score-month-v4'").fetchone():
         return
     try:
         if not exists:
@@ -79,6 +81,10 @@ def initialize(db):
             db.execute('INSERT INTO pb_template_versions VALUES(?,?,?,?,?,?,NULL)', (monthly.TEMPLATE_ID, 'personal-brand', version, 'published', dumps(body), now()))
             save_questions(db, monthly.TEMPLATE_ID, body)
             db.execute('INSERT INTO pb_scoring_models VALUES(?,?,?,?,?,NULL)', (monthly.MODEL_ID, scoring_version, 'published', dumps(monthly.model()), now()))
+        if not db.execute('SELECT 1 FROM pb_schema_migrations WHERE version=5').fetchone():
+            for statement in Path(__file__).with_name('personal_brand_migration_005.sql').read_text().split(';'):
+                if statement.strip():
+                    db.execute(statement)
         db.commit()
     except Exception:
         db.rollback()
@@ -176,9 +182,13 @@ def normalize_phone(value):
     if not isinstance(value, str):
         raise ValueError('شمارهٔ موبایل را وارد کنید.')
     digits = value.translate(str.maketrans('۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩', '01234567890123456789'))
+    digits = digits.translate(str.maketrans({'–': '-', '—': '-', '‐': '-', '.': ' ', '\u00a0': ' ', '\u200c': ' '}))
     if any(c not in '0123456789+ -()' for c in digits):
         raise ValueError('یک شمارهٔ موبایل معتبر ایران وارد کن.')
-    digits = ''.join(c for c in digits if c in '0123456789')
+    compact = ''.join(c for c in digits if c in '0123456789+')
+    if not re.fullmatch(r'(?:0|98|0098|\+98)9\d{9}', compact):
+        raise ValueError('یک شمارهٔ موبایل معتبر ایران وارد کنید.')
+    digits = compact.lstrip('+')
     if digits.startswith('0098'):
         digits = '0' + digits[4:]
     elif digits.startswith('98'):
@@ -202,7 +212,10 @@ def assessment_data(db, row, full=True):
         report['body'] = json.loads(report['body'])
         if not full:
             report['body'] = report_preview(report['body'])
-    return {'assessment': {k: row[k] for k in ('id', 'state', 'stage', 'revision', 'created_at', 'updated_at', 'template_version', 'scoring_version')}, 'template': template, 'order': json.loads(row['question_order']), 'answers': answers, 'reports': reports, 'report_unlocked': full}
+    data = {'assessment': {k: row[k] for k in ('id', 'state', 'stage', 'revision', 'created_at', 'updated_at', 'template_version', 'scoring_version')}, 'template': template, 'order': json.loads(row['question_order']), 'answers': answers, 'reports': reports, 'report_unlocked': full}
+    if template.get('schema') == 4:
+        data['report_flow'] = full_reports.flow_state(db, row['owner_hash'], row['id'], normalize_phone)
+    return data
 
 
 def create_report(db, row, reason, scoring_version=None):
@@ -317,10 +330,24 @@ def mutate(db, owner, data):
             raise ValueError('برای مشاهدهٔ گزارش کامل، رضایت خود را تأیید کنید.')
         if row['state'] != 'completed':
             raise ValueError('ابتدا ارزیابی را کامل کن.')
-        phone = normalize_phone(data.get('phone'))
+        phone = full_reports.saved_phone(db, owner, normalize_phone) if data.get('use_saved_phone') is True else normalize_phone(data.get('phone'))
+        if not phone:
+            raise ValueError('شمارهٔ ذخیره‌شده معتبر نیست؛ شمارهٔ موبایل را وارد کنید.')
         db.execute('INSERT INTO pb_leads VALUES(?,?,?,?,?) ON CONFLICT(assessment_id) DO UPDATE SET phone=excluded.phone,consent_version=excluded.consent_version,created_at=excluded.created_at', (row['id'], owner, phone, 'report-access-v1', now()))
         event(db, owner, row, 'lead_registered', 'lead:' + row['id'])
         audit(db, owner, 'report_unlocked', row['id'])
+        return {'ok': True}
+    if action == 'full_report':
+        report = full_reports.get_report(db, owner, row['id'], generate=True)
+        event(db, owner, row, 'full_report_viewed', 'full-view:' + report['sourceVersion'])
+        return {'report': report, 'offer': full_reports.offer(db, owner)}
+    if action == 'report_flow_event':
+        name = data.get('event')
+        if name not in {'full_report_selected', 'purchase_offer_selected'}:
+            raise ValueError('رویداد معتبر نیست.')
+        if name == 'purchase_offer_selected':
+            full_reports.get_report(db, owner, row['id'])
+        event(db, owner, row, name, name + ':' + row['id'])
         return {'ok': True}
     if action == 'restart':
         if row['state'] != 'completed' or data.get('confirmed') is not True:
@@ -392,6 +419,7 @@ def mutate(db, owner, data):
         audit(db, owner, 'report_exported', row['id'], {'version': reports[0]['version']})
         return {'report': reports[0]['body']}
     if action == 'view_report':
+        event(db, owner, row, 'initial_result_viewed', 'initial-view:' + row['id'])
         event(db, owner, row, 'report_viewed', 'view:' + row['id'])
         return {'ok': True}
     if action == 'abandon':
@@ -638,7 +666,10 @@ def dispatch(handler, connect, admin=False, write=False):
                     result = {'csrf': principal['csrf'], 'instagram_available': instagram.configured(), 'connection': public_connection(latest_connection(db, owner)), 'assessments': [dict(r) for r in db.execute('SELECT id,state,stage,created_at FROM pb_assessments WHERE owner_hash=? AND archived_at IS NULL ORDER BY created_at DESC', (owner,))]}
                 else:
                     row = owned(db, query.get('id', [''])[0], owner)
-                    result = assessment_data(db, row, full=admin or report_available(db, owner, row['id']))
+                    if query.get('action', [''])[0] == 'full_report':
+                        result = {'report': full_reports.get_report(db, owner, row['id']), 'offer': full_reports.offer(db, owner)}
+                    else:
+                        result = assessment_data(db, row, full=admin or report_available(db, owner, row['id']))
             db.commit()
         return handler.json(200, {'ok': True, 'data': result, 'request_id': trace}, headers)
     except PermissionError as error:
