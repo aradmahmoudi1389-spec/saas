@@ -81,6 +81,7 @@ html body.nesharo-site:not(.landing-mode) .page-hero{padding-block:var(--site-sp
 html body.nesharo-site:not(.landing-mode) :is(.page-hero p,.section-subtitle,.section-heading p,.pricing-note,.feature-card p,.step-card p,.legal-copy p,.legal-copy li){color:var(--landing-muted)}
 html body.nesharo-site:not(.landing-mode) :is(.auth-card,.panel,.white-card,.price-card,.feature-card,.contact-panel,.legal-copy,.insight-sheet,.faq-list details){background:var(--landing-card);border:1px solid var(--landing-line);border-radius:var(--site-radius);box-shadow:var(--site-shadow);color:var(--landing-text)}
 html body.nesharo-site:not(.landing-mode) .feature-card{padding:var(--site-space-4)}
+html body.nesharo-site:not(.landing-mode) .pricing-grid{grid-template-columns:repeat(2,minmax(0,1fr));max-width:830px}
 html body.nesharo-site:not(.landing-mode) .feature-card:hover{border-color:var(--landing-teal);transform:none}
 html body.nesharo-site:not(.landing-mode) .feature-icon{border-radius:50%;background:var(--landing-raised);color:var(--landing-teal)}
 html body.nesharo-site:not(.landing-mode) .price-card.featured{background:linear-gradient(145deg,var(--landing-raised),var(--landing-card));border-color:var(--landing-teal)}
