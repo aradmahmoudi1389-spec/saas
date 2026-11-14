@@ -16,8 +16,28 @@ OPERATIONS = {'identity_draft', 'identity_analysis', 'brand_voice', 'content_pil
 MAX_INPUT = 24000
 
 
+DEFAULT_URL = 'https://api.metisai.ir/api/v1/wrapper/grok/chat/completions'
+DEFAULT_MODEL = 'grok-4.6'
+MAX_RESPONSE = 65536
+
+
+def _setting(name, default=''):
+    value = os.environ.get(name, '').strip()
+    if value:
+        return value
+    # The project already authorizes one AI connection for the assessment report.
+    import brand_analysis
+    if name == 'BRANDYAR_AI_URL':
+        return default or brand_analysis.ENDPOINT
+    if name == 'BRANDYAR_AI_MODEL':
+        return default or brand_analysis.MODEL
+    if name == 'BRANDYAR_AI_KEY':
+        return os.environ.get('BRANDYAR_METIS_API_KEY', '').strip()
+    return default
+
+
 def configured():
-    return all(os.environ.get(name, '').strip() for name in ('BRANDYAR_AI_URL', 'BRANDYAR_AI_KEY', 'BRANDYAR_AI_MODEL'))
+    return bool(_setting('BRANDYAR_AI_KEY'))
 
 
 def _clean(value, limit=4000):
@@ -132,23 +152,25 @@ def generate(operation, identity, inputs=None):
     if not configured():
         raise AIUnavailable()
     payload = {
-        'model': os.environ['BRANDYAR_AI_MODEL'],
+        'model': _setting('BRANDYAR_AI_MODEL', DEFAULT_MODEL),
         'messages': [
             {'role': 'system', 'content': 'تو دستیار حرفه‌ای برندیـار هستی. زبان پاسخ فارسی است و از ساختن اطلاعات خودداری می‌کنی.'},
             {'role': 'user', 'content': _instruction(operation, identity, inputs)},
         ],
         'temperature': 0.2,
-        'response_format': {'type': 'json_object'},
     }
     request = urllib.request.Request(
-        os.environ['BRANDYAR_AI_URL'].strip(),
+        _setting('BRANDYAR_AI_URL', DEFAULT_URL),
         data=json.dumps(payload, ensure_ascii=False).encode(),
-        headers={'Content-Type': 'application/json', 'Authorization': f"Bearer {os.environ['BRANDYAR_AI_KEY'].strip()}"},
+        headers={'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _setting('BRANDYAR_AI_KEY')},
         method='POST',
     )
     try:
-        with urllib.request.urlopen(request, timeout=45) as response:
-            body = json.loads(response.read(1_000_000))
+        with urllib.request.urlopen(request, timeout=120) as response:
+            raw = response.read(MAX_RESPONSE + 1)
+        if len(raw) > MAX_RESPONSE:
+            raise ValueError('oversized')
+        body = json.loads(raw)
     except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError, OSError):
         raise AIResponseError('پاسخ هوش مصنوعی آماده نشد.')
     try:
