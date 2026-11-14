@@ -38,7 +38,9 @@ assert.match(externalHome, /class="landing-cta-card"/);
 assert.match(externalHome, /href="\/personal-brand"/);
 const mobileTools = read('brandyar.html').split('<details id="workspace-tools"')[1].split('</details>')[0];
 for (const page of ['identity','guide','pillars','library','settings']) assert.ok(mobileTools.includes(`data-page="${page}"`));
-assert.match(read('brandyar.html'), /href="#app">رفتن به ابزار جاری/);
+assert.doesNotMatch(read('brandyar.html'), /class="skip-link"/);
+assert.doesNotMatch(read('brandyar.html'), /theme-toggle/);
+assert.match(read('brandyar.html'), /<summary>همهٔ ابزارهای برندیـار<\/summary>/);
 assert.match(read('account.js'), /class="account-edit-layout"/);
 assert.match(read('account.js'), /account-product-zone/);
 for (const page of ['dashboard', 'roadmap', 'pillars', 'identity', 'guide', 'create', 'library', 'calendar', 'settings']) {
