@@ -142,6 +142,8 @@ def _text(value):
 
 
 def _items(value):
+    if isinstance(value, str):
+        value = [part for part in re.split(r'[،,\n]+', value)]
     if not isinstance(value, list):
         raise ValueError('فهرست این بخش معتبر نیست.')
     seen, result = set(), []
