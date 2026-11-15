@@ -153,7 +153,8 @@ class Handler(BaseHTTPRequestHandler):
         for key, value in (headers or {}).items():
             self.send_header(key, value)
         self.end_headers()
-        self.wfile.write(body)
+        if self.command != 'HEAD':
+            self.wfile.write(body)
 
     def json(self, status, payload, headers=None):
         self.respond(status, json.dumps(payload, ensure_ascii=False).encode(), headers=headers)
@@ -810,8 +811,15 @@ class Handler(BaseHTTPRequestHandler):
                 db.rollback()
                 return self.json(503, {'error': 'ذخیره‌سازی موقتاً در دسترس نیست؛ داده‌های قبلی حفظ شده‌اند.'})
 
+    def do_HEAD(self):
+        self.do_GET()
+
     def do_GET(self):
         path = urlsplit(self.path).path
+        if path.startswith('/brandyar/') and path.endswith('/') and path != '/brandyar/':
+            return self.respond(301, content_type='text/html; charset=utf-8', headers={'Location': path.rstrip('/')})
+        if path == '/brandyar/':
+            return self.respond(301, content_type='text/html; charset=utf-8', headers={'Location': '/brandyar'})
         if path in {'/assessment', '/assessment/'}:
             return self.respond(303, content_type='text/html; charset=utf-8', headers={'Location': '/personal-brand'})
         if path == '/api/personal-brand/instagram/callback':
