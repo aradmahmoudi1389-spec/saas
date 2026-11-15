@@ -43,6 +43,28 @@ assert.match(run('create()'),/for="create-idea"/);
 assert.match(run('create()'),/id="create-idea" name="idea"/);
 run('goToIdentity(1)');assert.equal(context.location.hash,'#identity/audience');assert.match(app.innerHTML,/data-section="audience"/);
 run('goToIdentity(2)');assert.equal(context.location.hash,'#identity/value');assert.match(app.innerHTML,/data-section="value"/);
+// Phase one: start page, four stages, field states and the ten-part final report.
+context.location.hash='#start';run('route()');assert.equal(heading.textContent,'شروع ساخت هویت');
+assert.match(app.innerHTML,/اول خودت را بشناس؛ بعد برندت را بساز\./);
+assert.match(app.innerHTML,/در این مسیر کمک می‌کنیم تخصص، مخاطب، ارزش و جایگاه حرفه‌ای خودت را بشناسی/);
+assert.equal((app.innerHTML.match(/class="card"/g)||[]).length>=4,true);
+assert.match(app.innerHTML,/خروجی نهایی/);
+assert.match(app.innerHTML,/href="#identity\/work"/);
+assert.equal(id.sections.length,4);
+assert.equal(JSON.stringify(id.sections.map(s=>s.id)),JSON.stringify(['work','audience','value','direction']));
+assert.ok(id.sections[0].fields.some(([k])=>k==='achievements'));
+assert.ok(id.sections[1].fields.some(([k])=>k==='obstacles'));
+assert.ok(id.sections[2].fields.some(([k])=>k==='workMethod'));
+assert.ok(id.sections[3].fields.some(([k])=>k==='futurePath'));
+id.state.identity={...id.empty(),professionalRole:'مشاور',industry:'آموزش',targetDescription:'مدیران',problems:['زمان'],valueProposition:'مسیر روشن',professionalGoals:['آموزش'],fieldStates:{workMethod:'hypothesis'},status:'ready_for_review'};
+context.location.hash='#identity/review';run('route()');
+for(const part of ['معرفی حرفه‌ای','تخصص و حوزهٔ فعالیت','مخاطبان اصلی','مشکلات مخاطبان','ارزش پیشنهادی','تفاوت‌های قابل اثبات','جایگاه پیشنهادی','اهداف حرفه‌ای','ارزش‌های شخصی و حرفه‌ای','جهت‌گیری محتوایی'])assert.ok(app.innerHTML.includes(part),part);
+assert.match(app.innerHTML,/data-ai-generate="identity_synthesis"/);
+assert.match(app.innerHTML,/data-edit-key=/);
+assert.match(app.innerHTML,/data-identity-action="approve"/);
+context.location.hash='#identity/value';run('route()');assert.match(app.innerHTML,/فرضیه/);
+assert.match(app.innerHTML,/data-ai-generate="identity_questions"/);
+assert.match(app.innerHTML,/data-ai-generate="identity_analysis"/);
 id.state.access={status:'none'};run('route()');assert.match(app.innerHTML,/data-ai-generate/);
 (async()=>{
   let sent;id.post=async body=>{sent=body;return {}};

@@ -15,13 +15,18 @@ REQUIRED = (
     'valueProposition', 'professionalGoals',
 )
 LISTS = (
-    'skills', 'services', 'differentiators', 'professionalGoals',
-    'personalValues', 'preferredTopics', 'excludedTopics', 'needs', 'problems',
+    'skills', 'services', 'achievements', 'differentiators', 'supportingEvidence', 'limitations',
+    'professionalGoals', 'personalValues', 'preferredTopics', 'excludedTopics', 'needs', 'problems',
+    'audienceWants', 'expectedResults', 'obstacles',
 )
 TEXTS = (
-    'professionalRole', 'industry', 'experience', 'valueProposition',
-    'desiredPerception', 'targetDescription', 'primaryGroup',
+    'professionalRole', 'industry', 'experience', 'valueProposition', 'workMethod',
+    'desiredPerception', 'targetDescription', 'primaryGroup', 'futurePath', 'positioningStatement',
 )
+AUDIENCE_LISTS = ('needs', 'problems', 'audienceWants', 'expectedResults', 'obstacles')
+# Stored audience list key -> the flat key the client sends.
+AUDIENCE_KEYS = {'needs': 'needs', 'problems': 'problems', 'audienceWants': 'audienceWants',
+                 'expectedResults': 'expectedResults', 'obstacles': 'obstacles'}
 SECTIONS = {
     'work': ('professionalRole', 'industry'),
     'audience': ('targetDescription', 'problems'),
@@ -30,12 +35,14 @@ SECTIONS = {
 }
 # Every stored field belongs to exactly one part, so un-approving after an edit stays scoped.
 PART_FIELDS = {
-    'work': ('professionalRole', 'industry', 'experience', 'skills', 'services'),
-    'audience': ('targetDescription', 'primaryGroup', 'needs', 'problems'),
-    'value': ('valueProposition', 'differentiators'),
+    'work': ('professionalRole', 'industry', 'experience', 'skills', 'services', 'achievements'),
+    'audience': ('targetDescription', 'primaryGroup', 'needs', 'problems', 'audienceWants',
+                 'expectedResults', 'obstacles'),
+    'value': ('valueProposition', 'workMethod', 'differentiators', 'supportingEvidence', 'limitations'),
     'direction': ('professionalGoals', 'desiredPerception', 'personalValues', 'preferredTopics',
-                  'excludedTopics'),
+                  'excludedTopics', 'futurePath'),
 }
+FIELD_STATES = ('confirmed', 'hypothesis', 'unknown')
 MAX_TEXT = 2000
 MAX_ITEMS = 20
 MAX_ITEM = 160
@@ -127,9 +134,13 @@ def empty_body():
     return {
         'id': 'brand-identity', 'status': 'not_started', 'completionPercentage': 0,
         'professionalRole': '', 'industry': '', 'experience': '', 'skills': [], 'services': [],
-        'targetAudience': {'description': '', 'primaryGroup': '', 'needs': [], 'problems': []},
-        'valueProposition': '', 'differentiators': [], 'professionalGoals': [],
-        'personalValues': [], 'preferredTopics': [], 'excludedTopics': [], 'desiredPerception': '',
+        'achievements': [],
+        'targetAudience': {'description': '', 'primaryGroup': '', 'needs': [], 'problems': [],
+                           'audienceWants': [], 'expectedResults': [], 'obstacles': []},
+        'valueProposition': '', 'workMethod': '', 'differentiators': [], 'supportingEvidence': [],
+        'limitations': [], 'professionalGoals': [], 'personalValues': [], 'preferredTopics': [],
+        'excludedTopics': [], 'desiredPerception': '', 'futurePath': '', 'positioningStatement': '',
+        'fieldStates': {},
         'testInsight': {'exists': False, 'summary': '', 'isApprovedForBrandUse': False, 'isResolved': False,
                         'source': ''},
         'approvedSections': [], 'draftSections': [],
@@ -161,7 +172,7 @@ def normalize(incoming, current, insight):
     body = empty_body()
     for key, value in empty_body().items():
         if key in ('id', 'status', 'completionPercentage', 'approvedSections', 'draftSections',
-                   'testInsight') or key == 'targetAudience':
+                   'testInsight', 'fieldStates') or key == 'targetAudience':
             continue
         previous = current.get(key)
         if isinstance(value, list):
@@ -175,6 +186,9 @@ def normalize(incoming, current, insight):
         'primaryGroup': previous_target.get('primaryGroup') if isinstance(previous_target.get('primaryGroup'), str) else '',
         'needs': list(previous_target.get('needs') or []),
         'problems': list(previous_target.get('problems') or []),
+        'audienceWants': list(previous_target.get('audienceWants') or []),
+        'expectedResults': list(previous_target.get('expectedResults') or []),
+        'obstacles': list(previous_target.get('obstacles') or []),
     }
     if not isinstance(incoming, dict):
         raise ValueError('اطلاعات ارسال‌شده معتبر نیست.')
@@ -183,7 +197,8 @@ def normalize(incoming, current, insight):
         if not isinstance(audience, dict):
             raise ValueError('اطلاعات مخاطب معتبر نیست.')
         incoming = dict(incoming)
-        for key in ('description', 'primaryGroup', 'needs', 'problems'):
+        for key in ('description', 'primaryGroup', 'needs', 'problems', 'audienceWants',
+                    'expectedResults', 'obstacles'):
             if key in audience:
                 incoming['targetDescription' if key == 'description' else key] = audience[key]
     for key in TEXTS:
@@ -200,12 +215,26 @@ def normalize(incoming, current, insight):
     for key in LISTS:
         if key in incoming:
             value = _items(incoming[key])
-            if key in ('needs', 'problems'):
+            if key in AUDIENCE_LISTS:
                 body['targetAudience'][key] = value
             else:
                 body[key] = value
+    body['fieldStates'] = _field_states(incoming.get('fieldStates'), current.get('fieldStates'))
     body['testInsight'] = insight
     return body
+
+
+def _field_states(incoming, previous):
+    """confirmed / hypothesis / unknown per field; anything unset stays confirmed."""
+    known = set(TEXTS) | set(LISTS)
+    result = {}
+    for source in (previous, incoming):
+        if not isinstance(source, dict):
+            continue
+        for key, value in source.items():
+            if key in known and value in FIELD_STATES:
+                result[key] = value
+    return result
 
 
 def missing(body):
@@ -220,10 +249,14 @@ def missing(body):
 
 def completion(body):
     values = [body['professionalRole'], body['industry'], body['experience'], body['skills'],
-              body['services'], body['targetAudience']['description'], body['targetAudience']['primaryGroup'],
-              body['targetAudience']['needs'], body['targetAudience']['problems'], body['valueProposition'],
-              body['differentiators'], body['professionalGoals'], body['desiredPerception'],
-              body['personalValues'], body['preferredTopics'], body['excludedTopics']]
+              body['services'], body['achievements'], body['targetAudience']['description'],
+              body['targetAudience']['primaryGroup'], body['targetAudience']['needs'],
+              body['targetAudience']['problems'], body['targetAudience']['audienceWants'],
+              body['targetAudience']['expectedResults'], body['targetAudience']['obstacles'],
+              body['valueProposition'], body['workMethod'], body['differentiators'],
+              body['supportingEvidence'], body['limitations'], body['professionalGoals'],
+              body['desiredPerception'], body['personalValues'], body['preferredTopics'],
+              body['excludedTopics'], body['futurePath']]
     return round(sum(1 for value in values if (len(value) if isinstance(value, list) else value)) * 100 / len(values))
 
 

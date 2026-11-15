@@ -1,43 +1,52 @@
 window.BRANDYAR_IDENTITY={
   sections:[
-    {id:'work',title:'دربارهٔ کار تو',fields:[
-      ['professionalRole','نقش یا عنوان حرفه‌ای','text','مثلاً مشاور کسب‌وکار یا طراح'],
-      ['industry','حوزهٔ کاری','text','در چه حوزه‌ای فعالیت می‌کنی؟'],
-      ['experience','تجربه','textarea','چه تجربه‌ای داری؟ این بخش اختیاری است.'],
+    {id:'work',title:'شناخت حرفه‌ای',fields:[
+      ['professionalRole','نقش یا عنوان حرفه‌ای','text','اگر بخواهی در یک جمله بگویی چه کاری انجام می‌دهی، چه می‌گویی؟'],
+      ['industry','حوزهٔ فعالیت','text','در چه زمینه‌ای تجربه یا تخصص بیشتری داری؟'],
+      ['experience','تجربه و سابقه','textarea','چند سال و در چه نقش‌هایی کار کرده‌ای؟ این بخش اختیاری است.'],
       ['skills','مهارت‌های اصلی','list','هر مهارت را با ویرگول جدا کن.'],
-      ['services','خدمات یا کارهایی که ارائه می‌کنی','list','هر خدمت را با ویرگول جدا کن.']
+      ['services','خدمات و فعالیت‌ها','list','هر خدمت را با ویرگول جدا کن.'],
+      ['achievements','دستاوردها و شواهد قابل استناد','list','نمونه‌ها، نتیجه‌ها یا رخدادهایی که واقعاً اتفاق افتاده‌اند.']
     ]},
-    {id:'audience',title:'دربارهٔ مخاطب تو',fields:[
-      ['targetDescription','مخاطب اصلی','textarea','به چه کسانی کمک می‌کنی؟'],
-      ['primaryGroup','گروهی که بیشتر می‌خواهی به آن‌ها کمک کنی','text','مثلاً صاحبان کسب‌وکارهای کوچک'],
+    {id:'audience',title:'شناخت مخاطب',fields:[
+      ['targetDescription','مخاطب اصلی','textarea','چه کسانی بیشترین بهره را از خدمات یا محتوای تو می‌برند؟'],
+      ['primaryGroup','گروه مخاطب','text','مثلاً صاحبان کسب‌وکارهای کوچک'],
+      ['problems','مشکلات مخاطب','list','بزرگ‌ترین مشکلی که این افراد با آن روبه‌رو هستند چیست؟'],
       ['needs','نیازهای مخاطب','list','نیازها را با ویرگول جدا کن.'],
-      ['problems','مسئله‌هایی که مخاطب با آن‌ها روبه‌روست','list','مسئله‌ها را با ویرگول جدا کن.']
+      ['audienceWants','خواسته‌ها','list','این افراد چه چیزی می‌خواهند به دست بیاورند؟'],
+      ['expectedResults','نتایج مورد انتظار','list','اگر مشکلشان حل شود، چه تغییری در زندگی یا کسب‌وکارشان ایجاد می‌شود؟'],
+      ['obstacles','موانع و دغدغه‌ها','list','چه چیزی مانع می‌شود یا آن‌ها را مردد می‌کند؟']
     ]},
-    {id:'value',title:'ارزشی که ایجاد می‌کنی',fields:[
-      ['valueProposition','ارزش پیشنهادی','textarea','چه نتیجه یا کمکی ارائه می‌دهی؟'],
-      ['differentiators','تفاوت حرفه‌ای و رویکرد خاص','list','هر مورد را با ویرگول جدا کن.']
+    {id:'value',title:'ارزش پیشنهادی و تمایز',fields:[
+      ['valueProposition','ارزش پیشنهادی','textarea','بعد از استفاده از خدمات یا آموزش تو، چه نتیجه‌ای برای مخاطب ایجاد می‌شود؟'],
+      ['workMethod','روش انجام کار','textarea','روش کار تو چه ویژگی مشخصی دارد؟'],
+      ['differentiators','تفاوت واقعی با گزینه‌های دیگر','list','هر مورد را با ویرگول جدا کن.'],
+      ['supportingEvidence','شواهد و دلایل اعتماد','list','چه تجربه یا نمونه‌ای می‌تواند این تفاوت را اثبات کند؟'],
+      ['limitations','محدودیت‌های تخصصی','list','در چه مواردی کمک نمی‌کنی یا تخصص نداری؟']
     ]},
-    {id:'direction',title:'مسیر حرفه‌ای تو',fields:[
-      ['professionalGoals','هدف حرفه‌ای','list','هدف‌ها را با ویرگول جدا کن.'],
-      ['desiredPerception','تصویری که می‌خواهی در ذهن مخاطب بسازی','textarea','دوست داری با چه ویژگی‌ای شناخته شوی؟'],
-      ['personalValues','ارزش‌های شخصی یا حرفه‌ای','list','ارزش‌ها را با ویرگول جدا کن.'],
-      ['preferredTopics','موضوع‌هایی که می‌خواهی دربارهٔ آن‌ها صحبت کنی','list','موضوع‌ها را با ویرگول جدا کن.'],
-      ['excludedTopics','موضوع‌هایی که نمی‌خواهی دربارهٔ آن‌ها صحبت کنی','list','موضوع‌های خارج از تمرکز را بنویس.']
+    {id:'direction',title:'جهت‌گیری برند',fields:[
+      ['professionalGoals','اهداف حرفه‌ای','list','هدف‌ها را با ویرگول جدا کن.'],
+      ['desiredPerception','تصویر مطلوب در ذهن مخاطب','textarea','دوست داری وقتی کسی نام تو را می‌شنود، چه چیزی به ذهنش برسد؟'],
+      ['personalValues','ارزش‌های شخصی و حرفه‌ای','list','ارزش‌ها را با ویرگول جدا کن.'],
+      ['preferredTopics','موضوعات مورد علاقه','list','موضوع‌هایی که می‌خواهی دربارهٔ آن‌ها صحبت کنی.'],
+      ['excludedTopics','موضوعات خارج از تمرکز','list','موضوع‌هایی که نمی‌خواهی دربارهٔ آن‌ها صحبت کنی.'],
+      ['futurePath','مسیر آیندهٔ برند','textarea','در یک سال آینده دوست داری برندت به چه جایگاهی برسد؟']
     ]}
   ],
   required:['professionalRole','industry','targetDescription','problems','valueProposition','professionalGoals'],
-  lists:['skills','services','differentiators','professionalGoals','personalValues','preferredTopics','excludedTopics'],
-  texts:['professionalRole','industry','experience','valueProposition','desiredPerception','targetDescription','primaryGroup'],
+  lists:['skills','services','achievements','needs','problems','audienceWants','expectedResults','obstacles','differentiators','supportingEvidence','limitations','professionalGoals','personalValues','preferredTopics','excludedTopics'],
+  texts:['professionalRole','industry','experience','valueProposition','workMethod','desiredPerception','targetDescription','primaryGroup','futurePath'],
   state:{identity:null,access:null,workspace:{brandVoice:null,contentPillars:null,library:[]},aiReady:false,testCompleted:false,trialUsed:false,csrf:'',signedIn:false,demoAuth:true,error:'',loadFailed:false,saving:false},
-  empty(){return {id:'brand-identity',status:'not_started',completionPercentage:0,professionalRole:'',industry:'',experience:'',skills:[],services:[],targetAudience:{description:'',primaryGroup:'',needs:[],problems:[]},valueProposition:'',differentiators:[],professionalGoals:[],personalValues:[],preferredTopics:[],excludedTopics:[],desiredPerception:'',testInsight:{exists:false,summary:'',isApprovedForBrandUse:false,source:''},approvedSections:[],draftSections:[],createdAt:null,updatedAt:null,approvedAt:null}},
+  empty(){return {id:'brand-identity',status:'not_started',completionPercentage:0,professionalRole:'',industry:'',experience:'',skills:[],services:[],achievements:[],targetAudience:{description:'',primaryGroup:'',needs:[],problems:[],wants:[],expectedResults:[],obstacles:[]},valueProposition:'',workMethod:'',differentiators:[],supportingEvidence:[],limitations:[],professionalGoals:[],personalValues:[],preferredTopics:[],excludedTopics:[],desiredPerception:'',futurePath:'',positioningStatement:'',fieldStates:{},testInsight:{exists:false,summary:'',isApprovedForBrandUse:false,source:''},approvedSections:[],draftSections:[],createdAt:null,updatedAt:null,approvedAt:null}},
   normalizeList(value){return [...new Set((Array.isArray(value)?value:String(value||'').split(/[،,\n]/)).map(x=>String(x).trim()).filter(Boolean).map(x=>x.slice(0,160)))].slice(0,20)},
-  normalize(value){const base=this.empty(),v={...base,...(value||{}),targetAudience:{...base.targetAudience,...((value||{}).targetAudience||{})},testInsight:{...base.testInsight,...((value||{}).testInsight||{})},approvedSections:Array.isArray(value?.approvedSections)?value.approvedSections:[],draftSections:Array.isArray(value?.draftSections)?value.draftSections:[]};for(const key of this.lists)v[key]=this.normalizeList(v[key]);for(const key of ['needs','problems'])v.targetAudience[key]=this.normalizeList(v.targetAudience[key]);for(const key of this.texts){const nested=key==='targetDescription'?'description':key==='primaryGroup'?'primaryGroup':null;if(nested)v.targetAudience[nested]=String(v.targetAudience[nested]||'').trim().slice(0,2000);else v[key]=String(v[key]||'').trim().slice(0,2000)}return v},
+  normalize(value){const base=this.empty(),v={...base,...(value||{}),targetAudience:{...base.targetAudience,...((value||{}).targetAudience||{})},testInsight:{...base.testInsight,...((value||{}).testInsight||{})},fieldStates:{...((value||{}).fieldStates||{})},approvedSections:Array.isArray(value?.approvedSections)?value.approvedSections:[],draftSections:Array.isArray(value?.draftSections)?value.draftSections:[]};for(const key of this.lists)v[key]=this.normalizeList(v[key]);for(const key of ['needs','problems','wants','expectedResults','obstacles'])v.targetAudience[key]=this.normalizeList(v.targetAudience[key]);for(const key of this.texts){const nested=key==='targetDescription'?'description':key==='primaryGroup'?'primaryGroup':null;if(nested)v.targetAudience[nested]=String(v.targetAudience[nested]||'').trim().slice(0,2000);else v[key]=String(v[key]||'').trim().slice(0,2000)}return v},
   current(){return this.normalize(this.state.identity)},
-  value(v,key){if(key==='targetDescription')return v.targetAudience.description;if(key==='primaryGroup')return v.targetAudience.primaryGroup;if(key==='needs'||key==='problems')return v.targetAudience[key];return v[key]},
+  value(v,key){if(key==='targetDescription')return v.targetAudience.description;if(key==='primaryGroup')return v.targetAudience.primaryGroup;if(['needs','problems','wants','expectedResults','obstacles'].includes(key))return v.targetAudience[key];return v[key]},
   has(v,key){const x=this.value(v,key);return Array.isArray(x)?x.length>0:Boolean(x)},
   missing(v){return this.required.filter(key=>!this.has(v,key))},
   sectionComplete(v,section){return section.fields.map(([key])=>key).filter(key=>this.required.includes(key)).every(key=>this.has(v,key))},
-  draftPointers(value){const current=this.current(),payload=this.normalize({...current,...value,targetAudience:{...current.targetAudience,...(value.targetAudience||{})}}),out={};for(const key of this.lists)out[key]=payload[key];for(const key of ['needs','problems'])out[key]=payload.targetAudience[key];for(const key of this.texts)out[key]=key==='targetDescription'?payload.targetAudience.description:key==='primaryGroup'?payload.targetAudience.primaryGroup:payload[key];return out},
+  fieldState(v,key){const s=v.fieldStates?.[key];return s==='hypothesis'||s==='unknown'?s:'confirmed'},
+  draftPointers(value){const current=this.current(),payload=this.normalize({...current,...value,targetAudience:{...current.targetAudience,...(value.targetAudience||{})}}),out={};for(const key of this.lists)out[key]=payload[key];for(const key of ['needs','problems','wants','expectedResults','obstacles'])out[key]=payload.targetAudience[key];for(const key of this.texts)out[key]=key==='targetDescription'?payload.targetAudience.description:key==='primaryGroup'?payload.targetAudience.primaryGroup:payload[key];return out},
   async refresh(){
     this.state.error='';this.state.loadFailed=false;
     try{

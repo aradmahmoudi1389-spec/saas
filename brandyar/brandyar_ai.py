@@ -12,9 +12,36 @@ class AIResponseError(Exception):
     pass
 
 
-OPERATIONS = {'identity_draft', 'identity_analysis', 'brand_voice', 'content_pillars', 'content_draft'}
+OPERATIONS = {'identity_draft', 'identity_analysis', 'identity_discovery', 'identity_questions',
+              'identity_synthesis', 'identity_consistency_check', 'brand_voice', 'content_pillars',
+              'content_draft'}
 MAX_INPUT = 24000
 
+SYSTEM_PROMPT = """تو مشاور ارشد استراتژی پرسونال برندینگ در محصول BrandYar هستی.
+
+تخصص تو شامل Personal Branding Strategy، Professional Identity، Audience Research، Positioning، Value Proposition، Differentiation و Brand Strategy است.
+
+هدف تو کمک به کاربر برای کشف و تدوین هویت حرفه‌ای واقعی اوست. تو یک پرسشنامه‌ساز نیستی؛ یک مشاور تحلیلی و راهنما هستی.
+
+اصول رفتاری:
+1. ابتدا پاسخ کاربر را دقیق بررسی کن.
+2. پاسخ‌های کلی و مبهم را به چالش بکش.
+3. در صورت نیاز سؤال تکمیلی بپرس.
+4. سؤال‌ها باید متناسب با نوع فعالیت کاربر باشند.
+5. از اصطلاحات تخصصی بدون توضیح استفاده نکن.
+6. پاسخ‌ها را صرفاً تأیید نکن؛ تحلیل انتقادی داشته باش.
+7. هیچ تجربه، مهارت، دستاورد، مشتری یا مزیتی را جعل نکن.
+8. بین واقعیت و فرضیه تفاوت قائل شو.
+9. اگر شواهد کافی وجود ندارد، میزان اطمینان را پایین اعلام کن.
+10. از عبارت‌های کلیشه‌ای و بازاریابی سطحی دوری کن.
+11. پیشنهادها باید مشخص، قابل اجرا و متناسب با اطلاعات کاربر باشند.
+12. زبان تمام خروجی‌ها فارسی روان و حرفه‌ای باشد.
+
+قوانین تحلیل: هر پاسخ را از نظر وضوح، ارتباط با هویت حرفه‌ای، میزان جزئیات، قابلیت اثبات، ارتباط با مخاطب و تناقض با پاسخ‌های قبلی بررسی کن. اگر پاسخ کافی است سؤال اضافه نپرس. اگر ناقص است فقط مهم‌ترین سؤال تکمیلی را مطرح کن. اگر اطلاعات متناقض است، تناقض را با توضیح کوتاه نشان بده و بخواه مشخص کند کدام درست است.
+
+قوانین تولید هویت: از اطلاعات تأییدشده استفاده کن؛ پیشنهادهای تأییدنشده را جداگانه نمایش بده؛ اطلاعات ناموجود را با حدس پر نکن؛ ارزش پیشنهادی را بر اساس مسئله مخاطب و نتیجه واقعی تدوین کن؛ تمایز را فقط در صورت وجود شواهد مطرح کن؛ جایگاه پیشنهادی باید روشن، قابل فهم و قابل دفاع باشد.
+
+خروجی: فقط JSON معتبر. هیچ متن اضافه، Markdown یا توضیح خارج از JSON تولید نکن. تمام فیلدهای خروجی باید با Schema تعریف‌شده در کد سازگار باشند."""
 
 DEFAULT_URL = 'https://api.metisai.ir/api/v1/wrapper/grok/chat/completions'
 DEFAULT_MODEL = 'grok-4.6'
@@ -82,14 +109,22 @@ def _instruction(operation, identity, inputs):
     common = 'فقط از داده‌های منبع استفاده کن. هیچ سابقه، عدد، نتیجه، مشتری، تخصص یا ادعایی را حدس نزن. اگر داده کافی نیست، آن را در questions یا missing اعلام کن. پاسخ فقط JSON معتبر باشد.'
     schemas = {
         'identity_draft': '{"summary":"","fields":{"professionalRole":"","industry":"","targetDescription":"","primaryGroup":"","valueProposition":"","differentiators":[],"professionalGoals":[]},"missing":[],"questions":[]}',
-        'identity_analysis': '{"strengths":[],"ambiguities":[],"contradictions":[],"missing":[],"questions":[],"paths":[]}',
+        'identity_analysis': '{"summary":"","confirmedFacts":[],"hypotheses":[],"unknowns":[],"strengths":[],"ambiguities":[],"contradictions":[],"missingInformation":[],"followUpQuestions":[],"recommendations":[],"reasoning":""}',
+        'identity_discovery': '{"summary":"","confirmedFacts":[],"hypotheses":[],"unknowns":[],"ambiguities":[],"contradictions":[],"nextQuestion":"","followUpQuestions":[],"recommendations":[],"reasoning":""}',
+        'identity_questions': '{"followUpQuestions":[{"question":"","why":"","priority":1}],"enoughInformation":false}',
+        'identity_synthesis': '{"professionalIdentity":"","professionalRole":"","industry":"","experience":"","coreSkills":[],"services":[],"targetAudience":"","audienceProblems":[],"audienceNeeds":[],"valueProposition":"","differentiators":[],"supportingEvidence":[],"professionalGoals":[],"desiredPerception":"","personalValues":[],"preferredTopics":[],"excludedTopics":[],"positioningStatement":"","confidence":"low","unresolvedQuestions":[],"hypotheses":[]}',
+        'identity_consistency_check': '{"consistent":true,"contradictions":[],"ambiguities":[],"unknowns":[],"summary":""}',
         'brand_voice': '{"definition":"","coreTraits":[],"keyMessages":[],"preferredWords":[],"avoidedWords":[],"serviceIntroduction":"","expertiseExplanation":"","shortIntroduction":"","beforeAfter":{"before":"","after":""}}',
         'content_pillars': '{"pillars":[{"name":"","purpose":"","audience":"","topics":[],"formats":[],"ideas":[],"status":"proposed"}],"questions":[]}',
         'content_draft': '{"title":"","hook":"","outline":[],"body":"","cta":"","variants":[],"questions":[]}',
     }
     labels = {
         'identity_draft': 'یک پیش‌نویس هویت حرفه‌ای بساز.',
-        'identity_analysis': 'هویت را تحلیل کن و فقط نقاط قوت، ابهام‌ها، تناقض‌ها و سؤال‌های قابل استناد را برگردان.',
+        'identity_analysis': 'اطلاعات موجود را کامل تحلیل کن: نقاط قوت، ابهام‌ها، تناقض‌ها، اطلاعات نامشخص و پیشنهادهای مشخص با دلیل.',
+        'identity_discovery': 'پاسخ‌های جدید را تحلیل کن و فقط مهم‌ترین سؤال بعدی را تعیین کن.',
+        'identity_questions': 'حداکثر سه سؤال تکمیلی اولویت‌بندی‌شده بساز؛ اگر اطلاعات کافی است آرایه خالی برگردان.',
+        'identity_synthesis': 'هویت پیشنهادی را از اطلاعات تأییدشده تدوین کن و فرضیه‌های تأییدنشده را جدا نگه دار.',
+        'identity_consistency_check': 'سازگاری اطلاعات را بررسی کن و تناقض‌ها را پیدا کن.',
         'brand_voice': 'از هویت تأییدشده یک پیش‌نویس راهنمای صدای برند بساز.',
         'content_pillars': 'بر اساس هویت تأییدشده چند ستون محتوایی پیشنهادی بساز.',
         'content_draft': 'یک پیش‌نویس محتوای اختصاصی بر اساس ورودی و هویت تأییدشده بساز.',
@@ -120,7 +155,13 @@ def _validate(operation, result):
         return result
     text_fields = {
         'identity_draft': ('summary', 'valueProposition', 'audienceDescription'),
-        'identity_analysis': (),
+        'identity_analysis': ('summary', 'reasoning'),
+        'identity_discovery': ('summary', 'nextQuestion', 'reasoning'),
+        'identity_questions': (),
+        'identity_synthesis': ('professionalIdentity', 'professionalRole', 'industry', 'experience',
+                               'targetAudience', 'valueProposition', 'desiredPerception',
+                               'positioningStatement'),
+        'identity_consistency_check': ('summary',),
         'brand_voice': ('definition', 'serviceIntroduction', 'expertiseExplanation', 'shortIntroduction'),
         'content_draft': ('title', 'hook', 'body', 'cta'),
     }[operation]
@@ -130,9 +171,25 @@ def _validate(operation, result):
         fields = result.get('fields') if isinstance(result.get('fields'), dict) else {}
         allowed = {'professionalRole', 'industry', 'targetDescription', 'primaryGroup', 'valueProposition', 'differentiators', 'professionalGoals'}
         result['fields'] = {key: (_list(value) if key in {'differentiators', 'professionalGoals'} else _clean(value, 2000)) for key, value in fields.items() if key in allowed}
-    for key in ('differentiators', 'missing', 'questions', 'strengths', 'ambiguities', 'contradictions', 'paths', 'coreTraits', 'keyMessages', 'preferredWords', 'avoidedWords', 'outline', 'variants'):
+    for key in ('differentiators', 'missing', 'questions', 'strengths', 'ambiguities', 'contradictions', 'paths', 'coreTraits', 'keyMessages', 'preferredWords', 'avoidedWords', 'outline', 'variants',
+                'confirmedFacts', 'hypotheses', 'unknowns', 'missingInformation', 'followUpQuestions', 'recommendations',
+                'coreSkills', 'services', 'audienceProblems', 'audienceNeeds', 'supportingEvidence',
+                'professionalGoals', 'personalValues', 'preferredTopics', 'excludedTopics', 'unresolvedQuestions'):
         if key in result:
             result[key] = _list(result[key])
+    if operation == 'identity_questions':
+        questions = result.get('followUpQuestions')
+        result['followUpQuestions'] = [
+            {'question': _clean(item.get('question'), 500), 'why': _clean(item.get('why'), 500),
+             'priority': item.get('priority') if isinstance(item.get('priority'), int) else 1}
+            for item in (questions if isinstance(questions, list) else [])
+            if isinstance(item, dict) and _clean(item.get('question'), 500)
+        ][:3]
+        result['enoughInformation'] = result.get('enoughInformation') is True
+    if operation == 'identity_synthesis':
+        result['confidence'] = result.get('confidence') if result.get('confidence') in {'low', 'medium', 'high'} else 'low'
+    if operation == 'identity_consistency_check':
+        result['consistent'] = result.get('consistent') is True
     if operation == 'brand_voice':
         before_after = result.get('beforeAfter') or {}
         result['beforeAfter'] = {'before': _clean(before_after.get('before')), 'after': _clean(before_after.get('after'))}
@@ -140,6 +197,12 @@ def _validate(operation, result):
             'definition', 'coreTraits', 'keyMessages', 'shortIntroduction', 'questions')):
         raise AIResponseError('پاسخ هوش مصنوعی ناقص است.')
     if operation in {'identity_draft', 'identity_analysis'} and not any(result.get(key) for key in ('summary', 'strengths', 'questions', 'missing')):
+        raise AIResponseError('پاسخ هوش مصنوعی ناقص است.')
+    if operation == 'identity_discovery' and not any(result.get(key) for key in ('summary', 'nextQuestion', 'followUpQuestions', 'confirmedFacts')):
+        raise AIResponseError('پاسخ هوش مصنوعی ناقص است.')
+    if operation == 'identity_synthesis' and not any(result.get(key) for key in ('professionalIdentity', 'valueProposition', 'positioningStatement', 'unresolvedQuestions')):
+        raise AIResponseError('پاسخ هوش مصنوعی ناقص است.')
+    if operation == 'identity_consistency_check' and not any(result.get(key) for key in ('summary', 'contradictions', 'ambiguities')):
         raise AIResponseError('پاسخ هوش مصنوعی ناقص است.')
     if operation == 'content_draft' and not result.get('body') and not result.get('questions'):
         raise AIResponseError('پیش‌نویس محتوا ناقص است.')
@@ -154,7 +217,7 @@ def generate(operation, identity, inputs=None):
     payload = {
         'model': _setting('BRANDYAR_AI_MODEL', DEFAULT_MODEL),
         'messages': [
-            {'role': 'system', 'content': 'تو دستیار حرفه‌ای برندیـار هستی. زبان پاسخ فارسی است و از ساختن اطلاعات خودداری می‌کنی.'},
+            {'role': 'system', 'content': SYSTEM_PROMPT},
             {'role': 'user', 'content': _instruction(operation, identity, inputs)},
         ],
         'temperature': 0.2,
@@ -166,7 +229,7 @@ def generate(operation, identity, inputs=None):
         method='POST',
     )
     try:
-        with urllib.request.urlopen(request, timeout=120) as response:
+        with urllib.request.urlopen(request, timeout=180) as response:
             raw = response.read(MAX_RESPONSE + 1)
         if len(raw) > MAX_RESPONSE:
             raise ValueError('oversized')

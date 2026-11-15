@@ -168,6 +168,106 @@ class ArchitectureTests(unittest.TestCase):
         self.assertEqual(self.post(csrf, cookie, action='ai_output_action', outputId=pending, outputAction='accept')[0], 422)
         self.assertEqual(len(snapshot['library']), 1)
 
+    def test_identity_phase_one_flow(self):
+        csrf, cookie = self.session()
+        # 1. Empty start: nothing is invented and approval is refused.
+        data = self.call(path='/api/brandyar', cookie=cookie)[1]['data']['identity']
+        self.assertEqual(data['status'], 'not_started')
+        self.assertEqual(data['completionPercentage'], 0)
+        self.assertEqual(data['achievements'], [])
+        self.assertEqual(data['targetAudience']['obstacles'], [])
+        self.assertEqual(self.post(csrf, cookie, action='identity_approve')[0], 422)
+        # 2. Draft save with the new phase-one fields.
+        draft = {'professionalRole': 'مشاور برند', 'industry': 'آموزش', 'achievements': ['کارگاه ۲۰ نفره'],
+                 'audienceWants': ['رشد پایدار'], 'expectedResults': ['فروش روشن'], 'obstacles': ['بودجه'],
+                 'workMethod': 'جلسهٔ هفتگی', 'supportingEvidence': ['نمونهٔ پروژه'], 'limitations': ['تبلیغات'],
+                 'futurePath': 'کارگاه آنلاین'}
+        self.assertEqual(self.post(csrf, cookie, action='identity_save', identity=draft)[0], 200)
+        saved = self.call(path='/api/brandyar', cookie=cookie)[1]['data']['identity']
+        self.assertEqual(saved['achievements'], ['کارگاه ۲۰ نفره'])
+        self.assertEqual(saved['targetAudience']['expectedResults'], ['فروش روشن'])
+        self.assertEqual(saved['workMethod'], 'جلسهٔ هفتگی')
+        self.assertEqual(saved['futurePath'], 'کارگاه آنلاین')
+        # 3. Reload keeps the draft (the same session reads it back).
+        self.assertEqual(self.call(path='/api/brandyar', cookie=cookie)[1]['data']['identity']['professionalRole'], 'مشاور برند')
+        # 4. Incomplete answers stay incomplete and cannot be approved.
+        self.assertEqual(self.post(csrf, cookie, action='identity_approve')[0], 422)
+        # 5. Field states: a hypothesis is stored but never auto-confirmed.
+        self.assertEqual(self.post(csrf, cookie, action='identity_save', identity={**draft, 'fieldStates': {'workMethod': 'hypothesis', 'limitations': 'unknown'}})[0], 200)
+        states = self.call(path='/api/brandyar', cookie=cookie)[1]['data']['identity']['fieldStates']
+        self.assertEqual(states['workMethod'], 'hypothesis')
+        self.assertEqual(states['limitations'], 'unknown')
+        self.assertEqual(self.post(csrf, cookie, action='identity_save', identity={**draft, 'fieldStates': {'workMethod': 'bogus'}})[0], 200)
+        self.assertEqual(self.call(path='/api/brandyar', cookie=cookie)[1]['data']['identity']['fieldStates']['workMethod'], 'hypothesis')
+        # 6. Complete the required fields, then approve explicitly.
+        full = {**draft, 'targetDescription': 'مدیران کوچک', 'problems': ['زمان'], 'valueProposition': 'مسیر روشن',
+                'professionalGoals': ['آموزش']}
+        self.assertEqual(self.post(csrf, cookie, action='identity_save', identity=full, insightApproval=False)[0], 200)
+        self.assertEqual(self.post(csrf, cookie, action='identity_approve')[0], 200)
+        approved = self.call(path='/api/brandyar', cookie=cookie)[1]['data']['identity']
+        self.assertEqual(approved['status'], 'approved')
+        self.assertTrue(approved['approvedAt'])
+        # 7. Changing an approved part marks it for review without deleting data.
+        self.assertEqual(self.post(csrf, cookie, action='identity_save', identity={**full, 'professionalRole': 'مدرس'}, sections=['work'])[0], 200)
+        revised = self.call(path='/api/brandyar', cookie=cookie)[1]['data']['identity']
+        self.assertEqual(revised['status'], 'needs_revision')
+        self.assertEqual(revised['professionalRole'], 'مدرس')
+        self.assertEqual(revised['achievements'], ['کارگاه ۲۰ نفره'])
+
+    def test_identity_ai_operations_and_errors(self):
+        csrf, cookie = self.session()
+        identity = {'professionalRole': 'مشاور', 'industry': 'آموزش', 'targetDescription': 'مدیران',
+                    'problems': ['زمان'], 'valueProposition': 'مسیر روشن', 'professionalGoals': ['آموزش']}
+        self.assertEqual(self.post(csrf, cookie, action='identity_save', identity=identity, insightApproval=False)[0], 200)
+        outputs = {
+            'identity_discovery': {'summary': 'پاسخ‌ها روشن است', 'nextQuestion': 'چه نمونه‌ای داری؟', 'confirmedFacts': ['نقش']},
+            'identity_analysis': {'summary': 'تحلیل', 'strengths': ['وضوح'], 'contradictions': ['زمان و بودجه'], 'recommendations': ['نمونه اضافه کن']},
+            'identity_questions': {'followUpQuestions': [{'question': 'نمونه؟', 'why': 'اثبات', 'priority': 1}], 'enoughInformation': False},
+            'identity_synthesis': {'professionalIdentity': 'مشاور آموزشی', 'valueProposition': 'مسیر روشن', 'confidence': 'medium', 'hypotheses': ['مخاطب مدیر است']},
+            'identity_consistency_check': {'consistent': False, 'contradictions': ['زمان'], 'summary': 'یک تناقض'},
+        }
+        with patch.object(server.brandyar_ai, 'generate', side_effect=lambda operation, *args: dict(outputs[operation])):
+            for operation in outputs:
+                status, response, _ = self.post(csrf, cookie, action='ai_generate', operation=operation, inputs={})
+                self.assertEqual(status, 200, operation)
+                self.assertEqual(response['data']['ai']['operation'], operation)
+            # 8. Rejecting a proposal keeps it out of the identity.
+            _, response, _ = self.post(csrf, cookie, action='ai_generate', operation='identity_synthesis', inputs={})
+            proposal = response['data']['ai']['id']
+            self.assertEqual(self.post(csrf, cookie, action='ai_output_action', outputId=proposal, outputAction='reject')[0], 200)
+            self.assertEqual(self.call(path='/api/brandyar', cookie=cookie)[1]['data']['identity']['professionalRole'], 'مشاور')
+            # 9. Editing a proposal is allowed and does not touch the identity.
+            _, response, _ = self.post(csrf, cookie, action='ai_generate', operation='identity_synthesis', inputs={})
+            proposal = response['data']['ai']['id']
+            self.assertEqual(self.post(csrf, cookie, action='ai_output_action', outputId=proposal, outputAction='edit', edited={'positioningStatement': 'نسخهٔ ویرایش‌شده'})[0], 200)
+            self.assertEqual(self.call(path='/api/brandyar', cookie=cookie)[1]['data']['identity']['positioningStatement'], '')
+        # 10. AI service failure becomes a readable error, not a crash.
+        with patch.object(server.brandyar_ai, 'generate', side_effect=server.brandyar_ai.AIResponseError('x')):
+            status, response, _ = self.post(csrf, cookie, action='ai_generate', operation='identity_analysis', inputs={})
+            self.assertEqual(status, 503)
+            self.assertIn('error', response)
+        with patch.object(server.brandyar_ai, 'generate', side_effect=server.brandyar_ai.AIUnavailable()):
+            self.assertEqual(self.post(csrf, cookie, action='ai_generate', operation='identity_analysis', inputs={})[0], 503)
+        # 11. Storage failure keeps the previous identity intact.
+        with patch.object(product, 'save', side_effect=sqlite3.OperationalError('fixture failure')):
+            self.assertEqual(self.post(csrf, cookie, action='identity_save', identity={**identity, 'professionalRole': 'تازه'})[0], 503)
+        self.assertEqual(self.call(path='/api/brandyar', cookie=cookie)[1]['data']['identity']['professionalRole'], 'مشاور')
+        # 12. Unknown operations are refused.
+        self.assertEqual(self.post(csrf, cookie, action='ai_generate', operation='identity_unknown', inputs={})[0], 422)
+
+    def test_identity_legacy_data_is_preserved(self):
+        csrf, cookie = self.session()
+        legacy = {'professionalRole': 'قدیمی', 'industry': 'آموزش', 'skills': ['تدریس'], 'targetDescription': 'دانشجو',
+                  'problems': ['تمرکز'], 'valueProposition': 'یادگیری', 'professionalGoals': ['رشد']}
+        self.assertEqual(self.post(csrf, cookie, action='identity_save', identity=legacy, insightApproval=False)[0], 200)
+        self.assertEqual(self.post(csrf, cookie, action='identity_save', identity={'achievements': ['نمونه']})[0], 200)
+        saved = self.call(path='/api/brandyar', cookie=cookie)[1]['data']['identity']
+        self.assertEqual(saved['professionalRole'], 'قدیمی')
+        self.assertEqual(saved['skills'], ['تدریس'])
+        self.assertEqual(saved['achievements'], ['نمونه'])
+        self.assertEqual(saved['targetAudience']['problems'], ['تمرکز'])
+        self.assertEqual(saved['targetAudience']['obstacles'], [])
+
 
 if __name__ == '__main__':
     unittest.main()

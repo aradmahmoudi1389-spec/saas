@@ -831,8 +831,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(303, content_type='text/html; charset=utf-8', headers={'Location': '/account'})
         if path == '/account':
             return self.respond(200, (ROOT / 'account.html').read_bytes(), 'text/html; charset=utf-8')
-        if path in {'/brandyar', '/brandyar.html', '/brandyar.css', '/brandyar.js', '/plans-data.js', '/brandyar-identity-data.js', '/brandyar/plans', '/brandyar/activate', '/brandyar/dashboard', '/brandyar/profile', '/brandyar/roadmap', '/brandyar/identity', '/brandyar/guide', '/brandyar/pillars', '/brandyar/create', '/brandyar/library', '/brandyar/calendar', '/brandyar/settings'}:
-            name = 'brandyar.html' if path in {'/brandyar', '/brandyar.html', '/brandyar/plans', '/brandyar/activate', '/brandyar/dashboard', '/brandyar/profile', '/brandyar/roadmap', '/brandyar/identity', '/brandyar/guide', '/brandyar/pillars', '/brandyar/create', '/brandyar/library', '/brandyar/calendar', '/brandyar/settings'} else path[1:]
+        if path in {'/brandyar', '/brandyar.html', '/brandyar.css', '/brandyar.js', '/plans-data.js', '/brandyar-identity-data.js', '/brandyar/plans', '/brandyar/activate', '/brandyar/dashboard', '/brandyar/start', '/brandyar/profile', '/brandyar/roadmap', '/brandyar/identity', '/brandyar/guide', '/brandyar/pillars', '/brandyar/create', '/brandyar/library', '/brandyar/calendar', '/brandyar/settings'}:
+            name = 'brandyar.html' if path in {'/brandyar', '/brandyar.html', '/brandyar/plans', '/brandyar/activate', '/brandyar/dashboard', '/brandyar/start', '/brandyar/profile', '/brandyar/roadmap', '/brandyar/identity', '/brandyar/guide', '/brandyar/pillars', '/brandyar/create', '/brandyar/library', '/brandyar/calendar', '/brandyar/settings'} else path[1:]
             file = ROOT / name
             return self.respond(200, file.read_bytes(), {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8'}[file.suffix])
         if path == '/api/account':
