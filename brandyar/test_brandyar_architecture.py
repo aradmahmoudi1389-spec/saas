@@ -269,5 +269,28 @@ class ArchitectureTests(unittest.TestCase):
         self.assertEqual(saved['targetAudience']['obstacles'], [])
 
 
+    def test_ai_readers_get_plain_content(self):
+        status, robots, _ = self.call(path='/robots.txt')
+        self.assertEqual(status, 200)
+        self.assertIn(b'Sitemap: https://nesharo.ir/sitemap.xml', robots)
+        self.assertIn(b'User-agent: GPTBot', robots)
+        self.assertIn(b'User-agent: ClaudeBot', robots)
+        self.assertNotIn(b'Disallow: /brandyar', robots)
+        status, sitemap, _ = self.call(path='/sitemap.xml')
+        self.assertEqual(status, 200)
+        self.assertIn(b'https://nesharo.ir/brandyar/dashboard', sitemap)
+        for route in ('/brandyar.md', '/llms.txt', '/brandyar/dashboard.md'):
+            status, body, _ = self.call(path=route)
+            self.assertEqual(status, 200)
+            text = body.decode()
+            self.assertIn('برندی‌یار', text)
+            self.assertIn('https://nesharo.ir/brandyar/start', text)
+            self.assertNotIn('<script', text)
+        status, page, _ = self.call(path='/brandyar/dashboard')
+        self.assertEqual(status, 200)
+        self.assertIn('برندی‌یار', page.decode())
+        self.assertIn('index,follow', page.decode())
+
+
 if __name__ == '__main__':
     unittest.main()

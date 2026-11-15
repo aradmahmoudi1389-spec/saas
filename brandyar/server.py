@@ -4,6 +4,7 @@ import datetime
 import getpass
 import hashlib
 import hmac
+import html
 import json
 import logging
 import os
@@ -35,6 +36,95 @@ CONSULTATION_ADMIN_ROLES = {'owner', 'support'}
 ROOT = Path(__file__).resolve().parent
 DB = Path(os.environ.get('BRANDYAR_DB', str(ROOT / '.data' / 'brandyar.sqlite3')))
 ROLES = {'owner', 'product', 'support', 'finance', 'viewer'} | set(admin_workspace.PERMISSIONS)
+SITE = 'https://nesharo.ir'
+BRANDYAR_PAGES = (
+    ('/brandyar', 'برندیـار؛ ابزار ساخت هویت برند شخصی'),
+    ('/brandyar/dashboard', 'اتاق فرمان برند'),
+    ('/brandyar/start', 'شروع ساخت هویت حرفه‌ای'),
+    ('/brandyar/roadmap', 'مسیر ساخت برند'),
+    ('/brandyar/identity', 'هویت حرفه‌ای'),
+    ('/brandyar/guide', 'راهنمای صدای برند'),
+    ('/brandyar/pillars', 'ستون‌های محتوایی'),
+    ('/brandyar/create', 'کارگاه محتوا'),
+    ('/brandyar/library', 'کتابخانهٔ محتوا'),
+    ('/brandyar/calendar', 'مسیر انتشار'),
+    ('/brandyar/settings', 'تنظیمات محصول'),
+    ('/brandyar/plans', 'تعرفه‌های برندیـار'),
+)
+ROBOTS_TXT = '''User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /admin/
+Disallow: /account
+
+User-agent: GPTBot
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /account
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+Sitemap: ''' + SITE + '''/sitemap.xml
+'''
+
+
+def sitemap_xml():
+    urls = ''.join(f'<url><loc>{SITE}{path}</loc><changefreq>weekly</changefreq></url>' for path, _ in BRANDYAR_PAGES)
+    return ('<?xml version="1.0" encoding="UTF-8"?>'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            f'<url><loc>{SITE}/</loc><changefreq>weekly</changefreq></url>{urls}</urlset>')
+
+
+def html_to_text(markup):
+    """Readable plain text for AI readers: drop scripts, styles and chrome, keep headings and list items."""
+    markup = re.sub(r'<(script|style|svg|noscript)\b.*?</\1>', ' ', markup, flags=re.S | re.I)
+    markup = re.sub(r'<!--.*?-->', ' ', markup, flags=re.S)
+    markup = re.sub(r'<(h[1-6])\b[^>]*>', '\n\n## ', markup, flags=re.I)
+    markup = re.sub(r'<li\b[^>]*>', '\n- ', markup, flags=re.I)
+    markup = re.sub(r'<(p|div|section|article|tr|br|ul|ol|details|summary)\b[^>]*>', '\n', markup, flags=re.I)
+    markup = re.sub(r'<[^>]+>', ' ', markup)
+    text = html.unescape(markup)
+    text = re.sub(r'[ \t]+', ' ', text)
+    text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)
+    return text.strip()
+
+
+def brandyar_markdown():
+    """The tool's public description as markdown, so an AI reader gets the whole product without running JS."""
+    markup = (ROOT / 'brandyar.html').read_text(encoding='utf-8')
+    overview = re.search(r'<section class="page" id="brandyar-overview">(.*?)</section>', markup, re.S)
+    body = html_to_text(overview.group(1) if overview else markup)
+    links = '\n'.join(f'- [{title}]({SITE}{path})' for path, title in BRANDYAR_PAGES)
+    return (f'# برندیـار — ابزار ساخت هویت برند شخصی\n\n'
+            f'آدرس ابزار: {SITE}/brandyar/dashboard\n\n'
+            f'{body}\n\n## صفحه‌های ابزار\n\n{links}\n\n'
+            f'## دسترسی\n\nورود و تست اجباری نیست؛ هر بازدیدکننده فضای کاری ناشناس خودش را دارد. '
+            f'هوش مصنوعی برندیـار فقط پیشنهاد می‌سازد و تأیید نهایی با کاربر است.\n')
+
 SECTIONS = {
     'owner': ('summary', 'users', 'tickets', 'plans', 'invoices', 'discounts', 'changes', 'features', 'funnel', 'churn', 'ai', 'integrations', 'sessions', 'audit'),
     'product': ('summary', 'users', 'changes', 'features', 'funnel', 'churn', 'ai', 'integrations'),
@@ -141,7 +231,12 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header('Content-Type', content_type)
         self.send_header('Content-Length', str(len(body)))
-        self.send_header('Cache-Control', 'no-store')
+        if content_type.startswith('text/html'):
+            # Public pages are static; letting readers and AI fetchers cache them avoids "cache miss" failures.
+            self.send_header('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400')
+            self.send_header('X-Robots-Tag', 'index, follow, max-snippet:-1, max-image-preview:large')
+        else:
+            self.send_header('Cache-Control', 'no-store')
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Referrer-Policy', 'no-referrer')
         policy = "default-src 'none'; style-src 'self'; font-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
@@ -811,15 +906,27 @@ class Handler(BaseHTTPRequestHandler):
                 db.rollback()
                 return self.json(503, {'error': 'ذخیره‌سازی موقتاً در دسترس نیست؛ داده‌های قبلی حفظ شده‌اند.'})
 
+    def brandyar_text(self, path):
+        """Plain-text and markdown views of the tool for AI readers that cannot run the SPA."""
+        if path == '/llms.txt':
+            return self.respond(200, brandyar_markdown().encode(), 'text/plain; charset=utf-8')
+        return self.respond(200, brandyar_markdown().encode(), 'text/markdown; charset=utf-8')
+
     def do_HEAD(self):
         self.do_GET()
 
     def do_GET(self):
         path = urlsplit(self.path).path
+        if path == '/robots.txt':
+            return self.respond(200, ROBOTS_TXT.encode(), 'text/plain; charset=utf-8')
+        if path == '/sitemap.xml':
+            return self.respond(200, sitemap_xml().encode(), 'application/xml; charset=utf-8')
         if path.startswith('/brandyar/') and path.endswith('/') and path != '/brandyar/':
             return self.respond(301, content_type='text/html; charset=utf-8', headers={'Location': path.rstrip('/')})
         if path == '/brandyar/':
             return self.respond(301, content_type='text/html; charset=utf-8', headers={'Location': '/brandyar'})
+        if path in {'/brandyar.md', '/llms.txt'} or (path.startswith('/brandyar/') and path.endswith('.md')):
+            return self.brandyar_text(path)
         if path in {'/assessment', '/assessment/'}:
             return self.respond(303, content_type='text/html; charset=utf-8', headers={'Location': '/personal-brand'})
         if path == '/api/personal-brand/instagram/callback':
@@ -834,6 +941,8 @@ class Handler(BaseHTTPRequestHandler):
         if path in {'/brandyar', '/brandyar.html', '/brandyar.css', '/brandyar.js', '/plans-data.js', '/brandyar-identity-data.js', '/brandyar/plans', '/brandyar/activate', '/brandyar/dashboard', '/brandyar/start', '/brandyar/profile', '/brandyar/roadmap', '/brandyar/identity', '/brandyar/guide', '/brandyar/pillars', '/brandyar/create', '/brandyar/library', '/brandyar/calendar', '/brandyar/settings'}:
             name = 'brandyar.html' if path in {'/brandyar', '/brandyar.html', '/brandyar/plans', '/brandyar/activate', '/brandyar/dashboard', '/brandyar/start', '/brandyar/profile', '/brandyar/roadmap', '/brandyar/identity', '/brandyar/guide', '/brandyar/pillars', '/brandyar/create', '/brandyar/library', '/brandyar/calendar', '/brandyar/settings'} else path[1:]
             file = ROOT / name
+            if file.suffix == '.html' and 'text/markdown' in self.headers.get('Accept', ''):
+                return self.respond(200, brandyar_markdown().encode(), 'text/markdown; charset=utf-8')
             return self.respond(200, file.read_bytes(), {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8'}[file.suffix])
         if path == '/api/account':
             return self.account_read()
