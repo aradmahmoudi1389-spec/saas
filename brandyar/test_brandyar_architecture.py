@@ -66,8 +66,11 @@ class ArchitectureTests(unittest.TestCase):
             self.assertEqual(self.post(csrf, cookie, action='account_save', account=invalid)[0], 422)
         self.assertEqual(self.call(path='/api/brandyar', cookie=cookie)[1]['data']['account'], account)
         self.assertEqual(self.post(csrf, cookie, action='account_logout')[0], 200)
-        self.assertFalse(self.call(path='/api/brandyar', cookie=cookie)[1]['data']['signedIn'])
-        self.assertEqual(self.post(csrf, cookie, action='account_save', account={})[0], 401)
+        after_logout = self.call(path='/api/brandyar', cookie=cookie)
+        self.assertTrue(after_logout[1]['data']['signedIn'])
+        self.assertEqual(after_logout[1]['data']['account']['name'], '')
+        self.assertIn('__Host-pb=', after_logout[2])
+        self.assertEqual(self.post(csrf, cookie, action='account_save', account={})[0], 403)
 
     def test_plan_settings_and_publication(self):
         csrf, cookie = self.session(completed=True)

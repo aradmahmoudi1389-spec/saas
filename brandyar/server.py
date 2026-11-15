@@ -637,6 +637,19 @@ class Handler(BaseHTTPRequestHandler):
         principal = personal_brand.session(self, db)
         return principal['owner_hash'] if principal else None
 
+    def brandyar_guest(self, db):
+        """Open access: a visitor without a session gets a fresh anonymous workspace instead of a sign-in wall."""
+        if personal_brand.session(self, db):
+            return None
+        if personal_brand.throttle(db, self, 'brandyar_guest', 60, 900):
+            return None
+        token = secrets.token_hex(32)
+        owner = personal_brand.digest(token)
+        db.execute('INSERT INTO pb_sessions VALUES(?,?,?,?)', (owner, secrets.token_hex(32), personal_brand.now(), personal_brand.now() + 30 * 86400))
+        db.commit()
+        self.guest_cookie = '__Host-pb=' + token + '; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000'
+        return owner
+
     def brandyar_ai_generate(self, db, owner, data):
         operation = data.get('operation')
         if operation not in brandyar_ai.OPERATIONS:
@@ -710,24 +723,26 @@ class Handler(BaseHTTPRequestHandler):
         if not self.assessment_https():
             return self.json(403, {'error': 'این بخش به اتصال امن نیاز دارد.'})
         with connect() as db:
-            owner = self.brandyar_owner(db)
+            owner = self.brandyar_owner(db) or self.brandyar_guest(db)
             if not owner:
                 return self.json(200, {'ok': True, 'data': {'signedIn': False}})
+            headers = {'Set-Cookie': self.guest_cookie} if getattr(self, 'guest_cookie', '') else {}
             return self.json(200, {'ok': True, 'data': {
                 'signedIn': True,
                 'csrf': db.execute('SELECT csrf FROM pb_sessions WHERE owner_hash=?', (owner,)).fetchone()['csrf'],
                 'demoAuth': True,
                 **self.brandyar_snapshot(db, owner)
-            }})
+            }}, headers=headers)
 
     def brandyar_write(self, account_only=False):
         if not self.assessment_https() or not self.safe_origin():
             return self.json(403, {'error': 'این درخواست به اتصال امن و معتبر نیاز دارد.'})
         with connect() as db:
-            owner = self.brandyar_owner(db)
+            owner = self.brandyar_owner(db) or self.brandyar_guest(db)
             if not owner:
                 return self.json(401, {'error': 'نشست کاربری پیدا نشد؛ صفحه را دوباره باز کن.'})
             principal = db.execute('SELECT csrf FROM pb_sessions WHERE owner_hash=?', (owner,)).fetchone()
+            guest_headers = {'Set-Cookie': self.guest_cookie} if getattr(self, 'guest_cookie', '') else {}
             try:
                 data = self.request_data(32768)
                 if not hmac.compare_digest(str(data.get('csrf', '')), principal['csrf']):
@@ -743,43 +758,43 @@ class Handler(BaseHTTPRequestHandler):
                     settings['selectedPlan'] = plan
                     db.execute('INSERT INTO pb_product_settings VALUES(?,?,?) ON CONFLICT(owner_hash) DO UPDATE SET body=excluded.body,updated_at=excluded.updated_at', (owner, personal_brand.dumps(settings), personal_brand.now()))
                     db.commit()
-                    return self.json(200, {'ok': True, 'data': {'access': brandyar_profile.access(db, owner)}})
+                    return self.json(200, {'ok': True, 'data': {'access': brandyar_profile.access(db, owner)}}, headers=guest_headers)
                 if action == 'account_save':
                     if account_only:
                         account = data.get('account')
                         name = account.get('name') if isinstance(account, dict) else None
                         if not isinstance(name, str) or not name.strip() or len(name) > 100:
                             raise ValueError('نام نمایشی را با حداکثر ۱۰۰ نویسه وارد کنید.')
-                    return self.json(200, {'ok': True, 'data': {'account': brandyar_profile.save_account(db, owner, data.get('account'))}})
+                    return self.json(200, {'ok': True, 'data': {'account': brandyar_profile.save_account(db, owner, data.get('account'))}}, headers=guest_headers)
                 if action == 'account_logout':
                     db.execute('DELETE FROM pb_sessions WHERE owner_hash=?', (owner,))
                     db.commit()
                     return self.json(200, {'ok': True, 'data': {'signedIn': False}}, headers={'Set-Cookie': '__Host-pb=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax'})
                 if action in {'settings_save', 'publication_save'}:
                     if action == 'settings_save':
-                        return self.json(200, {'ok': True, 'data': {'settings': brandyar_profile.save_product_settings(db, owner, data.get('settings'))}})
+                        return self.json(200, {'ok': True, 'data': {'settings': brandyar_profile.save_product_settings(db, owner, data.get('settings'))}}, headers=guest_headers)
                     workspace = brandyar_profile.save_publication(db, owner, data.get('itemId'), data.get('publishAt', ''), data.get('status'))
-                    return self.json(200, {'ok': True, 'data': {'workspace': workspace}})
+                    return self.json(200, {'ok': True, 'data': {'workspace': workspace}}, headers=guest_headers)
                 if action == 'identity_save':
                     insight_approval = data.get('insightApproval')
                     if insight_approval not in (True, False):
                         insight_approval = None
                     sections = brandyar_profile.validate_sections(data.get('sections'))
                     brandyar_profile.save(db, owner, data.get('identity') or {}, insight_approval, sections)
-                    return self.json(200, {'ok': True, 'data': self.brandyar_snapshot(db, owner)})
+                    return self.json(200, {'ok': True, 'data': self.brandyar_snapshot(db, owner)}, headers=guest_headers)
                 if action == 'identity_approve':
                     approved_at = data.get('approvedAt')
                     brandyar_profile.approve(db, owner, approved_at if isinstance(approved_at, int) else None)
-                    return self.json(200, {'ok': True, 'data': self.brandyar_snapshot(db, owner)})
+                    return self.json(200, {'ok': True, 'data': self.brandyar_snapshot(db, owner)}, headers=guest_headers)
                 if action == 'trial_grant':
                     plan = data.get('planId')
                     brandyar_profile.grant_trial(db, owner, plan if isinstance(plan, str) else '')
-                    return self.json(200, {'ok': True, 'data': self.brandyar_snapshot(db, owner)})
+                    return self.json(200, {'ok': True, 'data': self.brandyar_snapshot(db, owner)}, headers=guest_headers)
                 if action == 'access_revoke':
                     result = brandyar_profile.revoke(db, owner)
-                    return self.json(200, {'ok': True, 'data': {'access': result}})
+                    return self.json(200, {'ok': True, 'data': {'access': result}}, headers=guest_headers)
                 if action in {'ai_generate', 'ai_output_action', 'ai_feedback', 'library_action'}:
-                    return self.json(200, {'ok': True, 'data': self.brandyar_ai_write(db, owner, data)})
+                    return self.json(200, {'ok': True, 'data': self.brandyar_ai_write(db, owner, data)}, headers=guest_headers)
                 return self.json(422, {'error': 'این درخواست پشتیبانی نمی‌شود.'})
             except ValueError as error:
                 return self.json(422, {'error': str(error)})
