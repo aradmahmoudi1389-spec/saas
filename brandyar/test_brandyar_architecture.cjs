@@ -43,7 +43,7 @@ assert.match(run('create()'),/for="create-idea"/);
 assert.match(run('create()'),/id="create-idea" name="idea"/);
 run('goToIdentity(1)');assert.equal(context.location.hash,'#identity/audience');assert.match(app.innerHTML,/data-section="audience"/);
 run('goToIdentity(2)');assert.equal(context.location.hash,'#identity/value');assert.match(app.innerHTML,/data-section="value"/);
-id.state.access={status:'none'};run('route()');assert.doesNotMatch(app.innerHTML,/data-ai-generate/);
+id.state.access={status:'none'};run('route()');assert.match(app.innerHTML,/data-ai-generate/);
 (async()=>{
   let sent;id.post=async body=>{sent=body;return {}};
   await id.save({targetDescription:'مخاطب تازه',needs:'نیاز تازه',professionalRole:'نقش تازه'});

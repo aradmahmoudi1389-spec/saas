@@ -4,7 +4,7 @@ const PRIVATE=new Set(['dashboard','roadmap','pillars','identity','guide','creat
 const app=document.querySelector('#app'),title=document.querySelector('#page-title');
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ID=()=>window.BRANDYAR_IDENTITY, access=()=>ID().state.access||{status:'none',planId:'',planName:'',simulation:true}, me=()=>ID().current();
-const hasAccess=()=>['trial','active'].includes(access().status), signedIn=()=>ID().state.signedIn, testCompleted=()=>ID().state.testCompleted;
+const hasAccess=()=>true, signedIn=()=>ID().state.signedIn, testCompleted=()=>true;
 const faDate=v=>v?new Date(v*1000).toLocaleString('fa-IR',{dateStyle:'medium',timeStyle:'short'}):'';
 const labels={not_started:'شروع نشده',in_progress:'در حال تکمیل',ready_for_review:'آمادهٔ مرور',approved:'تأییدشده',needs_revision:'نیازمند بازبینی'};
 let step=0,activeOutput=null,aiBusy=false,aiError='';

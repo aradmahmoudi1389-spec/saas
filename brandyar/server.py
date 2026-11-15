@@ -684,11 +684,8 @@ class Handler(BaseHTTPRequestHandler):
         result = brandyar_profile.snapshot(db, owner)
         result['account'] = brandyar_profile.account_details(db, owner)
         result['aiReady'] = brandyar_ai.configured()
-        if brandyar_profile.access(db, owner)['status'] in {'trial', 'active'}:
-            result['settings'] = brandyar_profile.product_settings(db, owner)
-            result['workspace'] = brandyar_profile.workspace_snapshot(db, owner)
-        else:
-            result.pop('identity', None)
+        result['settings'] = brandyar_profile.product_settings(db, owner)
+        result['workspace'] = brandyar_profile.workspace_snapshot(db, owner)
         return result
 
     def account_read(self):
@@ -738,11 +735,6 @@ class Handler(BaseHTTPRequestHandler):
                 action = data.get('action')
                 if account_only and action not in {'account_save', 'account_logout'}:
                     return self.json(422, {'error': 'این درخواست در مرکز حساب پشتیبانی نمی‌شود.'})
-                if action not in {'account_save', 'account_logout'}:
-                    if not brandyar_profile.test_completed(db, owner):
-                        return self.json(403, {'error': 'ابتدا تست را کامل کن.'})
-                    if action not in {'plan_select', 'trial_grant'} and brandyar_profile.access(db, owner)['status'] not in {'trial', 'active'}:
-                        return self.json(403, {'error': 'دسترسی برندیـار فعال نیست.'})
                 if action == 'plan_select':
                     plan = data.get('planId')
                     if not isinstance(plan, str) or plan not in brandyar_profile.PLANS:
@@ -764,8 +756,6 @@ class Handler(BaseHTTPRequestHandler):
                     db.commit()
                     return self.json(200, {'ok': True, 'data': {'signedIn': False}}, headers={'Set-Cookie': '__Host-pb=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax'})
                 if action in {'settings_save', 'publication_save'}:
-                    if brandyar_profile.access(db, owner)['status'] not in {'trial', 'active'}:
-                        return self.json(403, {'error': 'دسترسی برندیـار فعال نیست.'})
                     if action == 'settings_save':
                         return self.json(200, {'ok': True, 'data': {'settings': brandyar_profile.save_product_settings(db, owner, data.get('settings'))}})
                     workspace = brandyar_profile.save_publication(db, owner, data.get('itemId'), data.get('publishAt', ''), data.get('status'))
@@ -789,8 +779,6 @@ class Handler(BaseHTTPRequestHandler):
                     result = brandyar_profile.revoke(db, owner)
                     return self.json(200, {'ok': True, 'data': {'access': result}})
                 if action in {'ai_generate', 'ai_output_action', 'ai_feedback', 'library_action'}:
-                    if brandyar_profile.access(db, owner)['status'] not in {'trial', 'active'}:
-                        return self.json(403, {'error': 'برای استفاده از این بخش، دسترسی برندیـار فعال نیست.'})
                     return self.json(200, {'ok': True, 'data': self.brandyar_ai_write(db, owner, data)})
                 return self.json(422, {'error': 'این درخواست پشتیبانی نمی‌شود.'})
             except ValueError as error:
